@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     volkszaehler_base_url: str | None = Field(default=None, description="Middleware-Basis, z.B. http://volkszaehler:8080")
     volkszaehler_uuid_haus: str | None = Field(default=None, description="UUID Hauptzähler (kumulativ kWh)")
+    volkszaehler_uuid_pv: str | None = Field(default=None, description="UUID PV-Erzeugung (kumulativ kWh)")
 
     heat_pump_api_base_url: str | None = Field(default=None, description="Optional: REST-Basis Wärmepumpe")
 

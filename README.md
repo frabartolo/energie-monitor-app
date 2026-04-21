@@ -40,6 +40,7 @@ Healthcheck: `GET http://localhost:8080/health`
 | `metric_id`     | Quelle |
 |-----------------|--------|
 | `haus_gesamt`   | Volkszähler (`VOLKSZAEHLER_UUID_HAUS`) |
+| `pv`            | Volkszähler (`VOLKSZAEHLER_UUID_PV`) |
 | `waermepumpe`   | HA-Entity `ENTITY_ID_WAERMEPUMPE_ENERGY` oder `HEAT_PUMP_API_BASE_URL` |
 | `eauto`         | HA-Entity `ENTITY_ID_EAUTO_ENERGY` |
 

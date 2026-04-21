@@ -44,6 +44,13 @@ class MetricService:
                 source="Volkszähler (Middleware)",
             ),
             MetricCatalogEntry(
+                id=MetricId.pv,
+                label="PV-Erzeugung",
+                unit="kWh",
+                measurement=MeasurementKind.cumulative_energy_kwh,
+                source="Volkszähler (Middleware)",
+            ),
+            MetricCatalogEntry(
                 id=MetricId.waermepumpe,
                 label="Wärmepumpen-Verbrauch",
                 unit="kWh",
@@ -65,6 +72,12 @@ class MetricService:
             return []
         return await vz.vz_get_tuples(self.client, s, s.volkszaehler_uuid_haus, start, end)
 
+    async def _points_pv(self, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
+        s = self.settings
+        if not s.volkszaehler_uuid_pv:
+            return []
+        return await vz.vz_get_tuples(self.client, s, s.volkszaehler_uuid_pv, start, end)
+
     async def _points_wp(self, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
         s = self.settings
         if s.entity_id_waermepumpe_energy:
@@ -82,6 +95,8 @@ class MetricService:
     async def _points(self, metric_id: MetricId, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
         if metric_id == MetricId.haus_gesamt:
             return await self._points_haus(start, end)
+        if metric_id == MetricId.pv:
+            return await self._points_pv(start, end)
         if metric_id == MetricId.waermepumpe:
             return await self._points_wp(start, end)
         if metric_id == MetricId.eauto:

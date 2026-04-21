@@ -15,6 +15,7 @@ class MetricId(str, Enum):
     haus_gesamt = "haus_gesamt"
     waermepumpe = "waermepumpe"
     eauto = "eauto"
+    pv = "pv"
 
 
 class MetricCatalogEntry(BaseModel):
