@@ -19,7 +19,7 @@ Monitoring der Energie in unserem Haus
    ```
 2. Deploy-Skript ausführbar machen:
    ```bash
-   chmod +x /home/runner/work/energie-monitor-app/energie-monitor-app/scripts/deploy.sh
+   chmod +x ./scripts/deploy.sh
    ```
 
 ## Verwendung
@@ -28,14 +28,14 @@ Monitoring der Energie in unserem Haus
 
 ```bash
 DEPLOY_TARGET="user@server:/opt/energie-monitor-app" \
-/home/runner/work/energie-monitor-app/energie-monitor-app/scripts/deploy.sh --dry-run
+./scripts/deploy.sh --dry-run
 ```
 
 ### 2) Deployment ausführen
 
 ```bash
 DEPLOY_TARGET="user@server:/opt/energie-monitor-app" \
-/home/runner/work/energie-monitor-app/energie-monitor-app/scripts/deploy.sh
+./scripts/deploy.sh
 ```
 
 ### Optionale Umgebungsvariable
@@ -46,6 +46,6 @@ Beispiel:
 
 ```bash
 DEPLOY_TARGET="user@server:/opt/energie-monitor-app" \
-BUILD_DIR="/home/runner/work/energie-monitor-app/energie-monitor-app" \
-/home/runner/work/energie-monitor-app/energie-monitor-app/scripts/deploy.sh
+BUILD_DIR="$(pwd)" \
+./scripts/deploy.sh
 ```
