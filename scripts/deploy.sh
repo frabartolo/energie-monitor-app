@@ -29,7 +29,7 @@ elif [[ -n "${1:-}" ]]; then
   exit 1
 fi
 
-: "${DEPLOY_TARGET:?DEPLOY_TARGET is required (example: user@host:/opt/energie-monitor-app)}"
+: "${DEPLOY_TARGET:?DEPLOY_TARGET is required (example: user@host:/path/to/app)}"
 
 if [[ ! "$DEPLOY_TARGET" =~ ^[^@[:space:]]+@[^:[:space:]]+:.+$ ]]; then
   echo "DEPLOY_TARGET must match user@host:/path" >&2
@@ -42,6 +42,7 @@ if [[ ! -d "$BUILD_DIR" ]]; then
 fi
 
 RSYNC_ARGS=(
+  -v
   -az
   --delete
   --exclude ".git"
