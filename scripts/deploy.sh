@@ -42,9 +42,9 @@ if [[ ! -d "$BUILD_DIR" ]]; then
 fi
 
 RSYNC_ARGS=(
-  -v
-  -az
+  -vaz
   --delete
+  --rsh "ssh -o StrictHostKeyChecking=yes"
   --exclude ".git"
   --exclude ".github"
   --exclude ".DS_Store"

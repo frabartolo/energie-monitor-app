@@ -9,6 +9,7 @@ Monitoring der Energie in unserem Haus
 - Linux/macOS oder WSL mit `bash`
 - `rsync`
 - SSH-Zugriff auf das Zielsystem
+- SSH-Host-Key des Zielsystems ist lokal bereits als vertrauenswürdig hinterlegt
 
 ### Schritte
 
