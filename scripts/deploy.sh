@@ -44,7 +44,7 @@ fi
 RSYNC_ARGS=(
   -vaz
   --delete
-  --rsh "ssh -o StrictHostKeyChecking=accept-new"
+  --rsh "ssh -o StrictHostKeyChecking=yes"
   --exclude ".git"
   --exclude ".github"
   --exclude ".DS_Store"
