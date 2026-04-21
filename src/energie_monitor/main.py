@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 
 from energie_monitor import __version__
@@ -33,7 +33,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Energie-Monitor", version=__version__, lifespan=lifespan)
 
 
-def http_client(request) -> httpx.AsyncClient:
+def http_client(request: Request) -> httpx.AsyncClient:
     return request.app.state.http_client
 
 
@@ -42,6 +42,21 @@ def metric_service(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> MetricService:
     return MetricService(settings, client)
+
+
+def parse_metric_id(metric_id: str = Path(..., description="Kennzahl-ID, z. B. pv, haus_gesamt")) -> MetricId:
+    key = metric_id.strip().casefold()
+    for m in MetricId:
+        if m.value == key:
+            return m
+    allowed = ", ".join(sorted(x.value for x in MetricId))
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unbekannte metric_id {metric_id!r}. Erlaubt: {allowed}",
+    )
+
+
+MetricIdPath = Annotated[MetricId, Depends(parse_metric_id)]
 
 
 @app.exception_handler(RuntimeError)
@@ -61,7 +76,7 @@ async def list_metrics(svc: Annotated[MetricService, Depends(metric_service)]):
 
 @app.get("/api/v1/metrics/{metric_id}/current", response_model=CurrentValueResponse)
 async def metric_current(
-    metric_id: MetricId,
+    metric_id: MetricIdPath,
     svc: Annotated[MetricService, Depends(metric_service)],
 ):
     return await svc.current(metric_id)
@@ -69,7 +84,7 @@ async def metric_current(
 
 @app.get("/api/v1/metrics/{metric_id}/timeseries", response_model=TimeSeriesResponse)
 async def metric_timeseries(
-    metric_id: MetricId,
+    metric_id: MetricIdPath,
     svc: Annotated[MetricService, Depends(metric_service)],
     start: datetime = Query(..., description="Beginn (ISO-8601, TZ empfohlen)"),
     end: datetime = Query(..., description="Ende (ISO-8601)"),
@@ -81,7 +96,7 @@ async def metric_timeseries(
 
 @app.get("/api/v1/metrics/{metric_id}/aggregate/daily", response_model=DailyAggregateResponse)
 async def metric_daily(
-    metric_id: MetricId,
+    metric_id: MetricIdPath,
     svc: Annotated[MetricService, Depends(metric_service)],
     start: datetime = Query(..., description="Zeitraumstart (Tagesaggregate ab UTC-Kalendertag)"),
     end: datetime = Query(..., description="Zeitraumende (exklusiver Grenztag in UTC)"),
@@ -93,7 +108,7 @@ async def metric_daily(
 
 @app.get("/api/v1/metrics/{metric_id}/aggregate/monthly", response_model=MonthlyAggregateResponse)
 async def metric_monthly(
-    metric_id: MetricId,
+    metric_id: MetricIdPath,
     svc: Annotated[MetricService, Depends(metric_service)],
     start: datetime = Query(...),
     end: datetime = Query(...),
@@ -105,7 +120,7 @@ async def metric_monthly(
 
 @app.get("/api/v1/metrics/{metric_id}/aggregate/yearly", response_model=YearlyAggregateResponse)
 async def metric_yearly(
-    metric_id: MetricId,
+    metric_id: MetricIdPath,
     svc: Annotated[MetricService, Depends(metric_service)],
     start: datetime = Query(...),
     end: datetime = Query(...),
@@ -117,7 +132,7 @@ async def metric_yearly(
 
 @app.get("/api/v1/metrics/{metric_id}/window-total", response_model=dict)
 async def metric_window_total(
-    metric_id: MetricId,
+    metric_id: MetricIdPath,
     svc: Annotated[MetricService, Depends(metric_service)],
     start: datetime = Query(...),
     end: datetime = Query(...),
