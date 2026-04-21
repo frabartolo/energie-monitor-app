@@ -46,6 +46,6 @@ Beispiel:
 
 ```bash
 DEPLOY_TARGET="user@server:/opt/energie-monitor-app" \
-BUILD_DIR="$(pwd)" \
+BUILD_DIR="./dist" \
 ./scripts/deploy.sh
 ```

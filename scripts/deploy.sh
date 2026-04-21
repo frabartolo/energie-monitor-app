@@ -8,7 +8,7 @@ DRY_RUN=false
 usage() {
   cat <<'EOF'
 Usage:
-  DEPLOY_TARGET="user@host:/ziel/pfad" ./scripts/deploy.sh [--dry-run]
+  DEPLOY_TARGET="user@host:/path" ./scripts/deploy.sh [--dry-run]
 
 Environment variables:
   DEPLOY_TARGET  Required. SSH target in rsync format user@host:/path
@@ -30,6 +30,11 @@ elif [[ -n "${1:-}" ]]; then
 fi
 
 : "${DEPLOY_TARGET:?DEPLOY_TARGET is required (example: user@host:/opt/energie-monitor-app)}"
+
+if [[ ! "$DEPLOY_TARGET" =~ ^[^@[:space:]]+@[^:[:space:]]+:.+$ ]]; then
+  echo "DEPLOY_TARGET must match user@host:/path" >&2
+  exit 1
+fi
 
 if [[ ! -d "$BUILD_DIR" ]]; then
   echo "BUILD_DIR does not exist: $BUILD_DIR" >&2
