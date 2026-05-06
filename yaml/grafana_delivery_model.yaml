@@ -19,8 +19,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/haus_gesamt/current"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/haus_gesamt/current"
           timeout: 30_s
         visualization:
           type: "stat"
@@ -33,8 +33,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/haus_gesamt/timeseries?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/haus_gesamt/timeseries?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "graph"
@@ -49,8 +49,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/haus_gesamt/aggregate/daily?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/haus_gesamt/aggregate/daily?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "barchart"
@@ -65,8 +65,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/haus_gesamt/aggregate/monthly?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/haus_gesamt/aggregate/monthly?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "barchart"
@@ -81,8 +81,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/haus_gesamt/aggregate/yearly?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/haus_gesamt/aggregate/yearly?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "barchart"
@@ -104,8 +104,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/pv/current"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/pv/current"
           timeout: 30_s
         visualization:
           type: "stat"
@@ -118,8 +118,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/pv/timeseries?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/pv/timeseries?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "graph"
@@ -134,8 +134,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/pv/aggregate/daily?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/pv/aggregate/daily?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "barchart"
@@ -150,8 +150,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/pv/aggregate/monthly?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/pv/aggregate/monthly?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "barchart"
@@ -166,8 +166,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/pv/aggregate/yearly?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/pv/aggregate/yearly?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "barchart"
@@ -189,8 +189,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/waermepumpe/current"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/waermepumpe/current"
           timeout: 30_s
         visualization:
           type: "stat"
@@ -203,8 +203,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/waermepumpe/timeseries?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/waermepumpe/timeseries?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "graph"
@@ -219,8 +219,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/waermepumpe/aggregate/daily?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/waermepumpe/aggregate/daily?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "barchart"
@@ -235,8 +235,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/waermepumpe/aggregate/monthly?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/waermepumpe/aggregate/monthly?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "barchart"
@@ -251,8 +251,8 @@ grafana_delivery_model:
         grafana_datasource:
           type: "JSON"
           query: "{'queryType': 'query', 'refId': 'A'}"
-          datasource_url: "http://homeassistant.local:8081"
-          url: "http://homeassistant.local:8081/api/v1/metrics/waermepumpe/aggregate/yearly?start={start}&end={end}"
+          datasource_url: "<ENERGIE_API_BASE_URL>"
+          url: "<ENERGIE_API_BASE_URL>/api/v1/metrics/waermepumpe/aggregate/yearly?start={start}&end={end}"
           timeout: 30_s
         visualization:
           type: "barchart"
@@ -311,7 +311,7 @@ zeitraumfahigkeit:
 konsumierbar:
   json_api_datasource:
     typ: "JSON"
-    url: "http://homeassistant.local:8081"
+    url: "<ENERGIE_API_BASE_URL>"
     timeout: 30_s
 
   output_format:

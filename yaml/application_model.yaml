@@ -11,7 +11,7 @@ metriken:
     unit: kWh
     source:
       type: volkszaehler
-      uuid: 159efc60-8536-11ee-a109-71c0d1e154eb
+      uuid: "<VOLKSZAEHLER_UUID_HAUS>"
       endpoint: GET /{uuid}
       method: get_current
     messart: cumulative_energy
@@ -26,7 +26,7 @@ metriken:
     unit: kWh
     source:
       type: volkszaehler
-      uuid: c8119ba0-8536-11ee-94b9-f18aaef3a040
+      uuid: "<VOLKSZAEHLER_UUID_PV>"
       endpoint: GET /{uuid}
       method: get_current
     messart: cumulative_energy
@@ -41,7 +41,7 @@ metriken:
     unit: kWh
     source:
       type: homeassistant
-      entity_id: sensor.keba_keenergy_33704686_heat_pump_total_energy_consumption
+      entity_id: "<ENTITY_ID_WAERMEPUMPE_ENERGY>"
       api_endpoint: GET /api/states/{entity_id}
     messart: cumulative_energy
     historische_daten:
@@ -55,7 +55,7 @@ metriken:
     unit: kWh
     source:
       type: homeassistant
-      entity_id: sensor.keba_keenergy_33704686_heat_pump_heating_energy_consumption
+      entity_id: "<ENTITY_ID_WAERMEPUMPE_HEIZUNG_ENERGY>"
       api_endpoint: GET /api/states/{entity_id}
     messart: cumulative_energy
     historische_daten:
@@ -69,7 +69,7 @@ metriken:
     unit: kWh
     source:
       type: homeassistant
-      entity_id: sensor.keba_keenergy_33704686_heat_pump_cooling_energy_consumption
+      entity_id: "<ENTITY_ID_WAERMEPUMPE_KUEHLEN_ENERGY>"
       api_endpoint: GET /api/states/{entity_id}
     messart: cumulative_energy
     historische_daten:
@@ -83,7 +83,7 @@ metriken:
     unit: kWh
     source:
       type: homeassistant
-      entity_id: sensor.keba_keenergy_33704686_heat_pump_hot_water_energy_consumption
+      entity_id: "<ENTITY_ID_WAERMEPUMPE_WARMWASSER_ENERGY>"
       api_endpoint: GET /api/states/{entity_id}
     messart: cumulative_energy
     historische_daten:
@@ -149,20 +149,20 @@ reset_logik:
 messpunkte:
   haus_gesamt:
     source: volkszaehler
-    entity: 159efc60-8536-11ee-a109-71c0d1e154eb
+    entity: "<VOLKSZAEHLER_UUID_HAUS>"
     ha_entity: null
-    volkszaehler_uuid: 159efc60-8536-11ee-a109-71c0d1e154eb
+    volkszaehler_uuid: "<VOLKSZAEHLER_UUID_HAUS>"
 
   pv:
     source: volkszaehler
-    entity: c8119ba0-8536-11ee-94b9-f18aaef3a040
+    entity: "<VOLKSZAEHLER_UUID_PV>"
     ha_entity: null
-    volkszaehler_uuid: c8119ba0-8536-11ee-94b9-f18aaef3a040
+    volkszaehler_uuid: "<VOLKSZAEHLER_UUID_PV>"
 
   waermepumpe:
     source: homeassistant
-    entity: sensor.keba_keenergy_33704686_heat_pump_total_energy_consumption
-    ha_entity: sensor.keba_keenergy_33704686_heat_pump_total_energy_consumption
+    entity: "<ENTITY_ID_WAERMEPUMPE_ENERGY>"
+    ha_entity: "<ENTITY_ID_WAERMEPUMPE_ENERGY>"
     volkszaehler_uuid: null
 
 ---

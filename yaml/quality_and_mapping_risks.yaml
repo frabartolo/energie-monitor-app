@@ -131,7 +131,7 @@ risiken:
       homeassistant_api:
         endpoint: "GET /api/states/{entity_id}"
         auth: "Bearer Token"
-        token: "eyJhbG..." (aus .env)
+        token: "<HOMEASSISTANT_TOKEN>"  # aus .env
         frequenz: "alle 5 Minuten"
         fehlerbehandlung: "NULL-Werte bei Timeout"
       implementierung:

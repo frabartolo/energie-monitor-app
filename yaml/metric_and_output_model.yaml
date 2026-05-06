@@ -304,7 +304,7 @@ metriken:
 input_quellen:
   volkszaehler_hauste:
     type: volkszaehler
-    uuid: 159efc60-8536-11ee-a109-71c0d1e154eb
+    uuid: "<VOLKSZAEHLER_UUID_HAUS>"
     endpoint: GET /{uuid}
     auth: keine
     frequenz: 5_minuten
@@ -312,7 +312,7 @@ input_quellen:
 
   volkszaehler_pv:
     type: volkszaehler
-    uuid: c8119ba0-8536-11ee-94b9-f18aaef3a040
+    uuid: "<VOLKSZAEHLER_UUID_PV>"
     endpoint: GET /{uuid}
     auth: keine
     frequenz: 5_minuten
@@ -320,37 +320,37 @@ input_quellen:
 
   homeassistant_keba:
     type: homeassistant
-    entity_id: sensor.keba_keenergy_33704686_heat_pump_total_energy_consumption
+    entity_id: "<ENTITY_ID_WAERMEPUMPE_ENERGY>"
     api_endpoint: GET /api/states/{entity_id}
     auth: Bearer Token
-    token: "eyJhbG..." (aus .env)
+    token: "<HOMEASSISTANT_TOKEN>"  # aus .env
     frequenz: 5_minuten
     fehlerbehandlung: null
 
   homeassistant_keba_heizung:
     type: homeassistant
-    entity_id: sensor.keba_keenergy_33704686_heat_pump_heating_energy_consumption
+    entity_id: "<ENTITY_ID_WAERMEPUMPE_HEIZUNG_ENERGY>"
     api_endpoint: GET /api/states/{entity_id}
     auth: Bearer Token
-    token: "eyJhbG..." (aus .env)
+    token: "<HOMEASSISTANT_TOKEN>"  # aus .env
     frequenz: 5_minuten
     fehlerbehandlung: null
 
   homeassistant_keba_kuehlen:
     type: homeassistant
-    entity_id: sensor.keba_keenergy_33704686_heat_pump_cooling_energy_consumption
+    entity_id: "<ENTITY_ID_WAERMEPUMPE_KUEHLEN_ENERGY>"
     api_endpoint: GET /api/states/{entity_id}
     auth: Bearer Token
-    token: "eyJhbG..." (aus .env)
+    token: "<HOMEASSISTANT_TOKEN>"  # aus .env
     frequenz: 5_minuten
     fehlerbehandlung: null
 
   homeassistant_keba_warmwasser:
     type: homeassistant
-    entity_id: sensor.keba_keenergy_33704686_heat_pump_hot_water_energy_consumption
+    entity_id: "<ENTITY_ID_WAERMEPUMPE_WARMWASSER_ENERGY>"
     api_endpoint: GET /api/states/{entity_id}
     auth: Bearer Token
-    token: "eyJhbG..." (aus .env)
+    token: "<HOMEASSISTANT_TOKEN>"  # aus .env
     frequenz: 5_minuten
     fehlerbehandlung: null
 

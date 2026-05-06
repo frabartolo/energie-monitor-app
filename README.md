@@ -56,3 +56,22 @@ Hinweis: Für kumulative Sensoren werden Zählerresets heuristisch erkannt; Lüc
 ### Konfiguration
 
 Siehe [`.env.example`](.env.example). `VOLKSZAEHLER_BASE_URL` ist die Basis-URL der Middleware (ohne Pfad zu einzelnen UUIDs).
+
+## YAML-Artefakte (KIara)
+
+Im Verzeichnis `yaml/` liegen von KIara generierte **fachliche Modelle** (Application/Mapping/Risks/Delivery/Dashboard-Konzept) als YAML.
+
+- Die Dateien sind **Dokumentation/Entwurfsartefakte**, keine aktive Runtime-Konfiguration.
+- Identifikatoren (UUIDs, Entity-IDs, Tokens) sind bewusst als **Platzhalter** (`<...>`) gehalten.
+
+## Deployment (optional)
+
+Wenn du das Repository auf ein Zielsystem synchronisieren willst (z. B. VM/NAS), kannst du das optionale `rsync`-Deploy-Skript nutzen:
+
+```bash
+chmod +x ./scripts/deploy.sh
+DEPLOY_TARGET="user@server:/opt/energie-monitor-app" ./scripts/deploy.sh --dry-run
+DEPLOY_TARGET="user@server:/opt/energie-monitor-app" ./scripts/deploy.sh
+```
+
+Voraussetzungen: `bash`, `rsync`, SSH-Zugriff und Host-Key ist lokal als vertrauenswürdig hinterlegt.
