@@ -1,0 +1,489 @@
+# 🏗️ Metric and Output Model
+# Erstellt von Agent-3 (Metrik- und Output-Architekt)
+# Datum: 2026-05-05
+
+---
+# Metrik-Definitionen
+
+metriken:
+  haus_gesamt:
+    name: Haus-Gesamtverbrauch
+    description: Gesamte Stromverbräuche des Hauses aus dem Volkszähler
+    unit: kWh
+    messart: cumulative_energy
+    input_quellen:
+      - volkszaehler_hauste
+    output_kategorien:
+      current_value:
+        endpoint: GET /api/v1/metrics/haus_gesamt/current
+        format: float
+        validierung: value > 0
+        fehlerbehandlung: null
+
+      historical_timeseries:
+        endpoint: GET /api/v1/metrics/haus_gesamt/timeseries?start={start}&end={end}
+        format: array[{"timestamp": ISO8601, "value": float, "unit": kWh}]
+        validierung:
+          - "timestamp in UTC"
+          - "value >= 0"
+          - "unit_of_measurement: kWh"
+        fehlerbehandlung:
+          - "NULL-Werte bei fehlenden Daten"
+          - "Log-Eintrag bei NULL-Werten"
+          - "Grafana NULL-Werte anzeigen"
+
+      daily_aggregate:
+        endpoint: GET /api/v1/metrics/haus_gesamt/aggregate/daily?start={start}&end={end}
+        format: array[{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Kalendertage
+          null_handling: "sum_only_non_null"
+        validierung:
+          - "date in UTC"
+          - "value > 0"
+          - "unit_of_measurement: kWh"
+
+      monthly_aggregate:
+        endpoint: GET /api/v1/metrics/haus_gesamt/aggregate/monthly?start={start}&end={end}
+        format: array[{"month": YYYY-MM, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Monate
+          null_handling: "sum_only_non_null"
+        validierung:
+          - "month in UTC"
+          - "value > 0"
+          - "unit_of_measurement: kWh"
+
+      yearly_aggregate:
+        endpoint: GET /api/v1/metrics/haus_gesamt/aggregate/yearly?start={start}&end={end}
+        format: array[{"year": YYYY, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Jahre
+          null_handling: "sum_only_non_null"
+        validierung:
+          - "year in UTC"
+          - "value > 0"
+          - "unit_of_measurement: kWh"
+
+  pv:
+    name: Solaranlage
+    description: Solarerzeugung und Einspeisung
+    unit: kWh
+    messart: cumulative_energy
+    input_quellen:
+      - volkszaehler_pv
+    output_kategorien:
+      current_value:
+        endpoint: GET /api/v1/metrics/pv/current
+        format: float
+        validierung: value >= 0
+        fehlerbehandlung: null
+
+      historical_timeseries:
+        endpoint: GET /api/v1/metrics/pv/timeseries?start={start}&end={end}
+        format: array[{"timestamp": ISO8601, "value": float, "unit": kWh}]
+        validierung:
+          - "timestamp in UTC"
+          - "value >= 0"
+          - "unit_of_measurement: kWh"
+
+      daily_aggregate:
+        endpoint: GET /api/v1/metrics/pv/aggregate/daily?start={start}&end={end}
+        format: array[{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Kalendertage
+          null_handling: "sum_only_non_null"
+
+      monthly_aggregate:
+        endpoint: GET /api/v1/metrics/pv/aggregate/monthly?start={start}&end={end}
+        format: array[{"month": YYYY-MM, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Monate
+          null_handling: "sum_only_non_null"
+
+      yearly_aggregate:
+        endpoint: GET /api/v1/metrics/pv/aggregate/yearly?start={start}&end={end}
+        format: array[{"year": YYYY, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Jahre
+          null_handling: "sum_only_non_null"
+
+  waermepumpe:
+    name: Wärmepumpe
+    description: Gesamtverbrauch der Wärmepumpe
+    unit: kWh
+    messart: cumulative_energy
+    input_quellen:
+      - homeassistant_keba
+    output_kategorien:
+      current_value:
+        endpoint: GET /api/v1/metrics/waermepumpe/current
+        format: float
+        validierung: value > 0
+        fehlerbehandlung: null
+
+      historical_timeseries:
+        endpoint: GET /api/v1/metrics/waermepumpe/timeseries?start={start}&end={end}
+        format: array[{"timestamp": ISO8601, "value": float, "unit": kWh}]
+        validierung:
+          - "timestamp in UTC"
+          - "value > 0"
+          - "unit_of_measurement: kWh"
+
+      daily_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe/aggregate/daily?start={start}&end={end}
+        format: array[{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Kalendertage
+          null_handling: "sum_only_non_null"
+
+      monthly_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe/aggregate/monthly?start={start}&end={end}
+        format: array[{"month": YYYY-MM, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Monate
+          null_handling: "sum_only_non_null"
+
+      yearly_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe/aggregate/yearly?start={start}&end={end}
+        format: array[{"year": YYYY, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Jahre
+          null_handling: "sum_only_non_null"
+
+  waermepumpe_heizung:
+    name: Wärmepumpe - Heizung
+    description: Heiz-Energieverbrauch der Wärmepumpe
+    unit: kWh
+    messart: cumulative_energy
+    input_quellen:
+      - homeassistant_keba_heizung
+    output_kategorien:
+      current_value:
+        endpoint: GET /api/v1/metrics/waermepumpe_heizung/current
+        format: float
+        validierung: value > 0
+        fehlerbehandlung: null
+
+      historical_timeseries:
+        endpoint: GET /api/v1/metrics/waermepumpe_heizung/timeseries?start={start}&end={end}
+        format: array[{"timestamp": ISO8601, "value": float, "unit": kWh}]
+        validierung:
+          - "timestamp in UTC"
+          - "value > 0"
+          - "unit_of_measurement: kWh"
+
+      daily_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe_heizung/aggregate/daily?start={start}&end={end}
+        format: array[{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Kalendertage
+          null_handling: "sum_only_non_null"
+
+      monthly_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe_heizung/aggregate/monthly?start={start}&end={end}
+        format: array[{"month": YYYY-MM, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Monate
+          null_handling: "sum_only_non_null"
+
+      yearly_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe_heizung/aggregate/yearly?start={start}&end={end}
+        format: array[{"year": YYYY, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Jahre
+          null_handling: "sum_only_non_null"
+
+  waermepumpe_kuehlen:
+    name: Wärmepumpe - Kühlen
+    description: Kühl-Energieverbrauch der Wärmepumpe
+    unit: kWh
+    messart: cumulative_energy
+    input_quellen:
+      - homeassistant_keba_kuehlen
+    output_kategorien:
+      current_value:
+        endpoint: GET /api/v1/metrics/waermepumpe_kuehlen/current
+        format: float
+        validierung: value > 0
+        fehlerbehandlung: null
+
+      historical_timeseries:
+        endpoint: GET /api/v1/metrics/waermepumpe_kuehlen/timeseries?start={start}&end={end}
+        format: array[{"timestamp": ISO8601, "value": float, "unit": kWh}]
+        validierung:
+          - "timestamp in UTC"
+          - "value > 0"
+          - "unit_of_measurement: kWh"
+
+      daily_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe_kuehlen/aggregate/daily?start={start}&end={end}
+        format: array[{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Kalendertage
+          null_handling: "sum_only_non_null"
+
+      monthly_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe_kuehlen/aggregate/monthly?start={start}&end={end}
+        format: array[{"month": YYYY-MM, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Monate
+          null_handling: "sum_only_non_null"
+
+      yearly_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe_kuehlen/aggregate/yearly?start={start}&end={end}
+        format: array[{"year": YYYY, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Jahre
+          null_handling: "sum_only_non_null"
+
+  waermepumpe_warmwasser:
+    name: Wärmepumpe - Warmwasser
+    description: Warmwasser-Energieverbrauch der Wärmepumpe
+    unit: kWh
+    messart: cumulative_energy
+    input_quellen:
+      - homeassistant_keba_warmwasser
+    output_kategorien:
+      current_value:
+        endpoint: GET /api/v1/metrics/waermepumpe_warmwasser/current
+        format: float
+        validierung: value > 0
+        fehlerbehandlung: null
+
+      historical_timeseries:
+        endpoint: GET /api/v1/metrics/waermepumpe_warmwasser/timeseries?start={start}&end={end}
+        format: array[{"timestamp": ISO8601, "value": float, "unit": kWh}]
+        validierung:
+          - "timestamp in UTC"
+          - "value > 0"
+          - "unit_of_measurement: kWh"
+
+      daily_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe_warmwasser/aggregate/daily?start={start}&end={end}
+        format: array[{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Kalendertage
+          null_handling: "sum_only_non_null"
+
+      monthly_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe_warmwasser/aggregate/monthly?start={start}&end={end}
+        format: array[{"month": YYYY-MM, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Monate
+          null_handling: "sum_only_non_null"
+
+      yearly_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe_warmwasser/aggregate/yearly?start={start}&end={end}
+        format: array[{"year": YYYY, "value": float, "unit": kWh}]
+        aggregatbildung:
+          method: sum
+          zeitraum: UTC-Jahre
+          null_handling: "sum_only_non_null"
+
+---
+# Input-Quellen
+
+input_quellen:
+  volkszaehler_hauste:
+    type: volkszaehler
+    uuid: 159efc60-8536-11ee-a109-71c0d1e154eb
+    endpoint: GET /{uuid}
+    auth: keine
+    frequenz: 5_minuten
+    fehlerbehandlung: null
+
+  volkszaehler_pv:
+    type: volkszaehler
+    uuid: c8119ba0-8536-11ee-94b9-f18aaef3a040
+    endpoint: GET /{uuid}
+    auth: keine
+    frequenz: 5_minuten
+    fehlerbehandlung: null
+
+  homeassistant_keba:
+    type: homeassistant
+    entity_id: sensor.keba_keenergy_33704686_heat_pump_total_energy_consumption
+    api_endpoint: GET /api/states/{entity_id}
+    auth: Bearer Token
+    token: "eyJhbG..." (aus .env)
+    frequenz: 5_minuten
+    fehlerbehandlung: null
+
+  homeassistant_keba_heizung:
+    type: homeassistant
+    entity_id: sensor.keba_keenergy_33704686_heat_pump_heating_energy_consumption
+    api_endpoint: GET /api/states/{entity_id}
+    auth: Bearer Token
+    token: "eyJhbG..." (aus .env)
+    frequenz: 5_minuten
+    fehlerbehandlung: null
+
+  homeassistant_keba_kuehlen:
+    type: homeassistant
+    entity_id: sensor.keba_keenergy_33704686_heat_pump_cooling_energy_consumption
+    api_endpoint: GET /api/states/{entity_id}
+    auth: Bearer Token
+    token: "eyJhbG..." (aus .env)
+    frequenz: 5_minuten
+    fehlerbehandlung: null
+
+  homeassistant_keba_warmwasser:
+    type: homeassistant
+    entity_id: sensor.keba_keenergy_33704686_heat_pump_hot_water_energy_consumption
+    api_endpoint: GET /api/states/{entity_id}
+    auth: Bearer Token
+    token: "eyJhbG..." (aus .env)
+    frequenz: 5_minuten
+    fehlerbehandlung: null
+
+---
+# Output-Verträge
+
+output_vertraege:
+  current_value:
+    beschreibung: Aktueller Zählerstand in kWh
+    json_format: {"metric_id": string, "timestamp": ISO8601, "value": float, "unit": kWh}
+    validierung: value >= 0
+    fehlerbehandlung: null
+
+  historical_timeseries:
+    beschreibung: Historische Zeitreihe mit Start- und Endzeitpunkt
+    json_format: [{"timestamp": ISO8601, "value": float, "unit": kWh}]
+    validierung:
+      - "timestamp in UTC"
+      - "value >= 0"
+      - "unit_of_measurement: kWh"
+    fehlerbehandlung:
+      - "NULL-Werte bei fehlenden Daten"
+      - "Log-Eintrag bei NULL-Werten"
+      - "Grafana NULL-Werte anzeigen"
+
+  daily_aggregate:
+    beschreibung: Tagesaggregate (Verbrauch pro Tag in kWh)
+    json_format: [{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+    validierung:
+      - "date in UTC"
+      - "value > 0"
+      - "unit_of_measurement: kWh"
+    aggregatbildung:
+      method: sum
+      zeitraum: UTC-Kalendertage
+      null_handling: "sum_only_non_null"
+
+  monthly_aggregate:
+    beschreibung: Monatsaggregate
+    json_format: [{"month": YYYY-MM, "value": float, "unit": kWh}]
+    validierung:
+      - "month in UTC"
+      - "value > 0"
+      - "unit_of_measurement: kWh"
+    aggregatbildung:
+      method: sum
+      zeitraum: UTC-Monate
+      null_handling: "sum_only_non_null"
+
+  yearly_aggregate:
+    beschreibung: Jahresaggregate
+    json_format: [{"year": YYYY, "value": float, "unit": kWh}]
+    validierung:
+      - "year in UTC"
+      - "value > 0"
+      - "unit_of_measurement: kWh"
+    aggregatbildung:
+      method: sum
+      zeitraum: UTC-Jahre
+      null_handling: "sum_only_non_null"
+
+---
+# Derivation und Normalisierung
+
+derivation_normalization:
+  einheiten_normalisierung:
+    volkszaehler: "kWh (kumulativ)"
+    homeassistant: "kWh (kumulativ)"
+    wallbox: "W (momentan)" → "kWh (bei Aggregatbildung)"
+
+  aggregatbildung:
+    daily: "sum über alle Datenpunkte des Tages (UTC-Kalendertag)"
+    monthly: "sum über alle Tagesaggregate des Monats"
+    yearly: "sum über alle Monatsaggregate des Jahres"
+
+  reset_handling:
+    volkszaehler:
+      erkennt_reset: "Sprung > 90% des maximalen Werts"
+      handling: "NULL-Wert in Zeitreihe"
+      log: "Log-Eintrag für jeden Reset"
+    homeassistant:
+      erkennt_reset: "kein Reset (kumulative Werte)"
+      handling: "keine spezielle Behandlung"
+      log: "keine Reset-Logik"
+
+---
+# Validierungsregeln
+
+validierungsregeln:
+  current_value:
+    - "value >= 0"
+    - "unit_of_measurement: kWh"
+    - "timestamp in UTC"
+    - "metric_id gültig"
+
+  historical_timeseries:
+    - "timestamp in UTC"
+    - "value >= 0"
+    - "unit_of_measurement: kWh"
+    - "timestamp aufsteigend"
+    - "keine NULL-Werte außer bei fehlenden Daten"
+
+  daily_aggregate:
+    - "date in UTC (YYYY-MM-DD)"
+    - "value > 0"
+    - "unit_of_measurement: kWh"
+    - "UTC-Kalendertage"
+    - "sum_only_non_null"
+
+  monthly_aggregate:
+    - "month in UTC (YYYY-MM)"
+    - "value > 0"
+    - "unit_of_measurement: kWh"
+    - "UTC-Monate"
+    - "sum_only_non_null"
+
+  yearly_aggregate:
+    - "year in UTC (YYYY)"
+    - "value > 0"
+    - "unit_of_measurement: kWh"
+    - "UTC-Jahre"
+    - "sum_only_non_null"
+
+---
+# Zeit-Handling
+
+zeit_handling:
+  timezone: Europe/Berlin
+  utc_offset: "+02:00 (Sommerzeit) / +01:00 (Winterzeit)"
+  historische_daten:
+    umwandlung_zeit: "auf Zeitpunkt der Ermittlung"
+    timezone_erhaltung: "UTC-Kalendertage für Aggregate"
+  utc_kalendertage:
+    daily: "UTC-Kalendertage für Daily Aggregate"
+    monthly: "UTC-Monate für Monthly Aggregate"
+    yearly: "UTC-Jahre für Yearly Aggregate"

@@ -1,0 +1,222 @@
+# 🔍 Quality and Mapping Risks
+# Erstellt von Agent-2 (Datenqualitäts- und Mapping-Analyst)
+# Datum: 2026-05-05
+
+---
+# Priorisierte Risiken
+
+risiken:
+  reset_detection:
+    priority: high
+    beschreibung: Zählerresets müssen korrekt erkannt werden, um Falsch-Verbräuche zu vermeiden
+    auswirkung:
+      current_value: null
+      timeseries: null (Lücken im Verlauf)
+      daily: null (falsche Tageswerte)
+      monthly: minimal (bei seltenen Resets)
+      yearly: minimal
+    loesung:
+      volkszaehler: "Vergleich von vorherigem und aktuellem Wert; bei Sprung > 90% Reset annehmen"
+      homeassistant: "Home Assistant Sensoren liefern kumulative Werte ohne Resets"
+      implementierung:
+        - "Werte vor und nach dem Zeitschritt speichern"
+        - "Reset-Erkennung bei abruptem Abfall (> 90% Sprung)"
+        - "Log-Eintrag für jeden Reset"
+        - "NULL-Wert in der Zeitreihe bei Reset"
+
+  datenluergen:
+    priority: medium
+    beschreibung: Fehlende Datenpunkte bei Verbindungsunterbrechungen
+    auswirkung:
+      current_value: current_value_imletzt
+      timeseries: null_werte
+      daily: average_last_value
+      monthly: average_last_value
+      yearly: average_last_value
+    loesung:
+      homeassistant: "SQLite-DB hat Historie; NULL-Werte bei fehlenden Daten"
+      volkszaehler: "REST API Abfrage; bei Fehlern NULL-Werte"
+      implementierung:
+        - "NULL-Werte in der JSON-Antwort"
+        - "Grafana NULL-Werte anzeigen (durchgestrichene Linie)"
+        - "Optionale Interpolation von NULL-Werten"
+
+  einheiten:
+    priority: high
+    beschreibung: Einheitliche Normalisierung erforderlich
+    auswirkung:
+      current_value: null (falsche Einheiten)
+      timeseries: null (falsche Einheiten)
+      daily: null (falsche Einheiten)
+      monthly: null (falsche Einheiten)
+      yearly: null (falsche Einheiten)
+    loesung:
+      einheiten_normalisierung:
+        - "Volkszähler: kWh (kumulativ)"
+        - "Leistung: W (momentan)"
+        - "Wärmepumpe: kWh (kumulativ)"
+      implementierung:
+        - "Alle Werte in kWh normalisieren"
+        - "Leistung in W × Δt in Wh umrechnen"
+        - "Einheiten-Metadaten in JSON speichern"
+
+  zeitzonen:
+    priority: medium
+    beschreibung: UTC vs. lokale Zeit (Europe/Berlin)
+    auswirkung:
+      current_value: current_value_zeitpunkt
+      timeseries: null (falsche Zeitstempel)
+      daily: null (falsche Datumsgrenzen)
+      monthly: null (falsche Monatsgrenzen)
+      yearly: null (falsche Jahresgrenzen)
+    loesung:
+      timezone_handling:
+        - "Timezone: Europe/Berlin (Sommerzeit +02:00, Winterzeit +01:00)"
+        - "Historische Daten auf Zeit des Zeitpunkts umwandeln"
+        - "Grafana Zeitzonen in Einstellungen anpassen"
+      implementierung:
+        - "Alle Zeitstempel in UTC speichern"
+        - "Konvertierung bei Ausgabe in Europe/Berlin"
+        - "UTC-Kalendertage für Aggregate"
+
+  messart_trennung:
+    priority: high
+    beschreibung: Leistung (instantaneous_power) vs. Energie (cumulative_energy)
+    auswirkung:
+      current_value: null (falsche Art)
+      timeseries: null (falsche Art)
+      daily: null (falsche Art)
+      monthly: null (falsche Art)
+      yearly: null (falsche Art)
+    loesung:
+      messart_unterscheidung:
+        - "Volkszähler: cumulative_energy (kumulativ)"
+        - "Wallbox (Shelly): instantaneous_power (momentan)"
+        - "Wärmepumpe: cumulative_energy (kumulativ)"
+      implementierung:
+        - "Methode in Application Model speichern"
+        - "Beim Aggregat-Verfahren messart berücksichtigen"
+        - "Leistung in Energie umrechnen bei Aggregatbildung"
+
+  volkszaehler_schnittstelle:
+    priority: high
+    beschreibung: REST API vs. MQTT für Datenabfrage
+    auswirkung:
+      current_value: null (keine Daten)
+      timeseries: null (keine Daten)
+      daily: null (keine Daten)
+      monthly: null (keine Daten)
+      yearly: null (keine Daten)
+    loesung:
+      volkszaehler_api:
+        endpoint: "GET /{uuid}"
+        auth: "keine (öffentlich)"
+        frequenz: "alle 5 Minuten"
+        fehlerbehandlung: "NULL-Werte bei Timeout"
+      implementierung:
+        - "REST API Abfrage für aktuelle Werte"
+        - "NULL-Werte bei fehlenden Daten"
+        - "Retry-Logik bei Verbindungsfehlern"
+
+  homeassistant_api:
+    priority: high
+    beschreibung: REST API für Home Assistant Daten
+    auswirkung:
+      current_value: null (keine Daten)
+      timeseries: null (keine Daten)
+      daily: null (keine Daten)
+      monthly: null (keine Daten)
+      yearly: null (keine Daten)
+    loesung:
+      homeassistant_api:
+        endpoint: "GET /api/states/{entity_id}"
+        auth: "Bearer Token"
+        token: "eyJhbG..." (aus .env)
+        frequenz: "alle 5 Minuten"
+        fehlerbehandlung: "NULL-Werte bei Timeout"
+      implementierung:
+        - "API-Token in .env speichern"
+        - "NULL-Werte bei fehlenden Daten"
+        - "Retry-Logik bei Verbindungsfehlern"
+
+---
+# Impact-Analyse auf Output-Kategorien
+
+impact_analyse:
+  current_value:
+    kritisch: reset_detection, messart_trennung, einheiten
+    warnend: datenluergen, zeitzonen
+    optional: volkszaehler_schnittstelle, homeassistant_api
+
+  timeseries:
+    kritisch: reset_detection, datenluergen, messart_trennung, zeitzonen
+    warnend: einheiten
+    optional: volkszaehler_schnittstelle, homeassistant_api
+
+  daily_aggregate:
+    kritisch: reset_detection, messart_trennung, zeitzonen
+    warnend: datenluergen, einheiten
+    optional: volkszaehler_schnittstelle, homeassistant_api
+
+  monthly_aggregate:
+    kritisch: reset_detection, messart_trennung
+    warnend: datenluergen, zeitzonen, einheiten
+    optional: volkszaehler_schnittstelle, homeassistant_api
+
+  yearly_aggregate:
+    kritisch: reset_detection, messart_trennung
+    warnend: datenluergen, zeitzonen, einheiten
+    optional: volkszaehler_schnittstelle, homeassistant_api
+
+---
+# Nichteintragung in Grafana
+
+logik_nicht_in_grafana:
+  reset_detection:
+    beschreibung: Grafana kann Resets nicht automatisch erkennen
+    loesung: "NULL-Werte in Zeitreihen"
+    implementierung: "JSON API mit NULL-Werten"
+
+  einheiten_normalisierung:
+    beschreibung: Grafana erwartet konsistente Einheiten
+    loesung: "Einheiten-Metadaten in JSON speichern"
+    implementierung: "JSON API mit unit_of_measurement"
+
+  timezone_handling:
+    beschreibung: Grafana Zeitzonen-Einstellungen müssen angepasst werden
+    loesung: "UTC-Kalendertage für Aggregate"
+    implementierung: "Grafana Timezone in Einstellungen: UTC"
+
+  null_werte:
+    beschreibung: Grafana NULL-Werte als "keine Daten" anzeigen
+    loesung: "NULL-Werte in JSON API"
+    implementierung: "Grafana NULL-Werte durchgestrichene Linie"
+
+---
+# Qualitäts-Fokus
+
+qualitaetsfokus:
+  reset_detection:
+    - "Vergleich von vorherigen und aktuellen Werten"
+    - "Heuristik für Resets (> 90% Sprung)"
+    - "Log-Einträge für jeden Reset"
+
+  datenluergen:
+    - "NULL-Werte in JSON API"
+    - "Optionale Interpolation"
+    - "Grafana NULL-Werte anzeigen"
+
+  einheitenfehler:
+    - "Konsistente Einheiten-Konvertierung"
+    - "Einheiten-Metadaten in JSON"
+    - "Validierung bei Ausgabe"
+
+  zeitbezug:
+    - "UTC vs. lokale Zeit"
+    - "Europe/Berlin (Sommerzeit/Winterzeit)"
+    - "UTC-Kalendertage für Aggregate"
+
+  logging:
+    - "Log-Einträge für jeden Reset"
+    - "Fehlermeldungen bei NULL-Werten"
+    - "Zeitstempel in UTC"

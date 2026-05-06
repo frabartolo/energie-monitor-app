@@ -1,0 +1,454 @@
+# 📋 Dashboard-Konzept + priorisierte Umsetzung
+# Erstellt von Agent-5 (Dashboard- und Umsetzungsplaner)
+# Datum: 2026-05-05
+
+---
+# Dashboard-Konzept
+
+dashboard_konzept:
+  dashboard_1:
+    name: "📊 Live/Überblick"
+    beschreibung: Live-Dashboard mit aktuellen Werten und Verläufen
+    zeitraum: "heute, 24h, 7d, Monat, Jahr"
+    panes:
+      - aktueller_verbrauch:
+          typ: "stat"
+          metrik: haus_gesamt
+          title: "Aktueller Gesamtverbrauch"
+          unit: "kWh"
+
+      - aktueller_solarertrag:
+          typ: "stat"
+          metrik: pv
+          title: "Aktueller Solarertrag"
+          unit: "kWh"
+
+      - waermepumpe_uebersicht:
+          typ: "graph"
+          metrik: waermepumpe
+          title: "Wärmepumpenverbrauch (24h)"
+          unit: "kWh"
+
+      - verbrauchs_vergleich:
+          typ: "graph"
+          metrik: haus_gesamt vs pv
+          title: "Verbrauch vs Ertrag (24h)"
+          unit: "kWh"
+
+      - netz_einspeisung:
+          typ: "barchart"
+          metrik: pv
+          title: "Einspeisung (Tagesverlauf)"
+          unit: "kWh"
+
+  dashboard_2:
+    name: "📈 Historische Verläufe"
+    beschreibung: Historische Zeitreihen mit Filterung nach Zeiträumen
+    zeitraum: "heute, 24h, 7d, Monat, Jahr, frei"
+    panes:
+      - haus_gesamt_verlauf:
+          typ: "graph"
+          metrik: haus_gesamt
+          title: "Haus-Gesamtverbrauch Verlauf"
+          unit: "kWh"
+
+      - waermepumpe_verlauf:
+          typ: "graph"
+          metrik: waermepumpe
+          title: "Wärmepumpenverbrauch Verlauf"
+          unit: "kWh"
+
+      - solarertrag_verlauf:
+          typ: "graph"
+          metrik: pv
+          title: "Solarertrag Verlauf"
+          unit: "kWh"
+
+      - verbrauchs_trends:
+          typ: "barchart"
+          metrik: haus_gesamt
+          title: "Verbrauchstrends (Monatlich)"
+          unit: "kWh"
+
+      - jahresverlauf:
+          typ: "graph"
+          metrik: haus_gesamt
+          title: "Jahresverlauf (2024-2026)"
+          unit: "kWh"
+
+  dashboard_3:
+    name: "📅 Aggregate (Tag/Monat/Jahr)"
+    beschreibung: Aggregate mit Tages-, Monats- und Jahresauswertungen
+    zeitraum: "Täglich, Wöchentlich, Monatlich, Jährlich"
+    panes:
+      - tagesaggregate:
+          typ: "barchart"
+          metrik: haus_gesamt
+          title: "Täglicher Gesamtverbrauch"
+          unit: "kWh"
+
+      - monatsaggregate:
+          typ: "barchart"
+          metrik: haus_gesamt
+          title: "Monatlicher Gesamtverbrauch"
+          unit: "kWh"
+
+      - jahresaggregate:
+          typ: "barchart"
+          metrik: haus_gesamt
+          title: "Jährlicher Gesamtverbrauch"
+          unit: "kWh"
+
+      - waermepumpe_aggregate:
+          typ: "barchart"
+          metrik: waermepumpe
+          title: "Wärmepumpenaggregate (Täg/Monat/Jahr)"
+          unit: "kWh"
+
+      - solar_aggregate:
+          typ: "barchart"
+          metrik: pv
+          title: "Solaraggregate (Täg/Monat/Jahr)"
+          unit: "kWh"
+
+---
+# klare Reihenfolge von Messpunkt-Validierung bis Dashboard-Bau
+
+umsetzungs_reihenfolge:
+  1. messpunkt_validierung:
+     beschreibung: Validierung aller Messpunkte und Datenquellen
+     schritte:
+       - "Volkszähler UUIDs prüfen"
+       - "Home Assistant Entity IDs bestätigen"
+       - "Wärmepumpe-Sensoren validieren"
+       - "E-Auto Entity ID prüfen (falls vorhanden)"
+     ergebnis: "Alle Messpunkte sind validiert und bereit für die Integration"
+
+  2. datenquellen_integration:
+     beschreibung: Integration aller Datenquellen in den App-Container
+     schritte:
+       - "Volkszähler REST API einrichten"
+       - "Home Assistant API Token konfigurieren"
+       - "Wärmepumpe-Sensoren in Home Assistant hinzufügen"
+     ergebnis: "Alle Datenquellen sind im App-Container integriert"
+
+  3. metrik_berechnung:
+     beschreibung: Berechnung aller Metriken (Current Value, Historical, Daily, Monthly, Yearly)
+     schritte:
+       - "Current Value (aktueller Zählerstand)"
+       - "Historical Time Series (Zeitreihe)"
+       - "Daily Aggregate (Tageswerte)"
+       - "Monthly Aggregate (Monatswerte)"
+       - "Yearly Aggregate (Jahreswerte)"
+     ergebnis: "Alle Metriken sind bereitet und verfügbar"
+
+  4. grafana_docker_setup:
+     beschreibung: Setup des Grafana-Docker-Containers
+     schritte:
+       - "Docker Compose konfigurieren"
+       - "Grafana Container starten"
+       - "Datenquelle JSON API einrichten"
+       - "Dashboard-Dateien importieren"
+     ergebnis: "Grafana-Container läuft mit Dashboards"
+
+  5. dashboard_bau:
+     beschreibung: Bau der Dashboards basierend auf dem Dashboard-Konzept
+     schritte:
+       - "Dashboard 1: Live/Überblick"
+       - "Dashboard 2: Historische Verläufe"
+       - "Dashboard 3: Aggregate"
+       - "Dashboard-Dateien importieren"
+     ergebnis: "Alle Dashboards sind importiert und sichtbar"
+
+  6. testing:
+     beschreibung: Test aller Dashboards und Metriken
+     schritte:
+       - "Dashboard 1: Live/Überblick testen"
+       - "Dashboard 2: Historische Verläufe testen"
+       - "Dashboard 3: Aggregate testen"
+       - "Datenkonsistenz prüfen"
+     ergebnis: "Alle Dashboards funktionieren korrekt"
+
+  7. deployment:
+     beschreibung: Deployment der Dashboards in die Produktion
+     schritte:
+       - "Dashboards in Grafana importieren"
+       - "Zugriffsrechte konfigurieren"
+       - "Monitoring einrichten"
+     ergebnis: "Alle Dashboards sind in der Produktion"
+
+---
+# Dashboard 1: Live/Überblick
+
+dashboard_1_detail:
+  name: "📊 Live/Überblick"
+  zeitraum: "heute, 24h, 7d, Monat, Jahr"
+  panes:
+    - aktueller_verbrauch:
+        typ: "stat"
+        metrik: haus_gesamt
+        title: "Aktueller Gesamtverbrauch"
+        unit: "kWh"
+
+    - aktueller_solarertrag:
+        typ: "stat"
+        metrik: pv
+        title: "Aktueller Solarertrag"
+        unit: "kWh"
+
+    - waermepumpe_uebersicht:
+        typ: "graph"
+        metrik: waermepumpe
+        title: "Wärmepumpenverbrauch (24h)"
+        unit: "kWh"
+
+    - verbrauchs_vergleich:
+        typ: "graph"
+        metrik: haus_gesamt vs pv
+        title: "Verbrauch vs Ertrag (24h)"
+        unit: "kWh"
+
+    - netz_einspeisung:
+        typ: "barchart"
+        metrik: pv
+        title: "Einspeisung (Tagesverlauf)"
+        unit: "kWh"
+
+---
+# Dashboard 2: Historische Verläufe
+
+dashboard_2_detail:
+  name: "📈 Historische Verläufe"
+  zeitraum: "heute, 24h, 7d, Monat, Jahr, frei"
+  panes:
+    - haus_gesamt_verlauf:
+        typ: "graph"
+        metrik: haus_gesamt
+        title: "Haus-Gesamtverbrauch Verlauf"
+        unit: "kWh"
+
+    - waermepumpe_verlauf:
+        typ: "graph"
+        metrik: waermepumpe
+        title: "Wärmepumpenverbrauch Verlauf"
+        unit: "kWh"
+
+    - solarertrag_verlauf:
+        typ: "graph"
+        metrik: pv
+        title: "Solarertrag Verlauf"
+        unit: "kWh"
+
+    - verbrauchs_trends:
+        typ: "barchart"
+        metrik: haus_gesamt
+        title: "Verbrauchstrends (Monatlich)"
+        unit: "kWh"
+
+    - jahresverlauf:
+        typ: "graph"
+        metrik: haus_gesamt
+        title: "Jahresverlauf (2024-2026)"
+        unit: "kWh"
+
+---
+# Dashboard 3: Aggregate (Tag/Monat/Jahr)
+
+dashboard_3_detail:
+  name: "📅 Aggregate (Tag/Monat/Jahr)"
+  zeitraum: "Täglich, Wöchentlich, Monatlich, Jährlich"
+  panes:
+    - tagesaggregate:
+        typ: "barchart"
+        metrik: haus_gesamt
+        title: "Täglicher Gesamtverbrauch"
+        unit: "kWh"
+
+    - monatsaggregate:
+        typ: "barchart"
+        metrik: haus_gesamt
+        title: "Monatlicher Gesamtverbrauch"
+        unit: "kWh"
+
+    - jahresaggregate:
+        typ: "barchart"
+        metrik: haus_gesamt
+        title: "Jährlicher Gesamtverbrauch"
+        unit: "kWh"
+
+    - waermepumpe_aggregate:
+        typ: "barchart"
+        metrik: waermepumpe
+        title: "Wärmepumpenaggregate (Täg/Monat/Jahr)"
+        unit: "kWh"
+
+    - solar_aggregate:
+        typ: "barchart"
+        metrik: pv
+        title: "Solaraggregate (Täg/Monat/Jahr)"
+        unit: "kWh"
+
+---
+# priorisierte Umsetzung
+
+priorisierte_umsetzung:
+  priority_1:
+    dashboard: "Dashboard 1: Live/Überblick"
+    beschreibung: "Priorität 1: Live-Dashboard mit aktuellen Werten"
+    begruendung: "Unverzichtbar für den täglichen Überblick"
+
+  priority_2:
+    dashboard: "Dashboard 2: Historische Verläufe"
+    beschreibung: "Priorität 2: Historische Verläufe mit Filterung"
+    begruendung: "Wichtig für Analysen und Trend-Beobachtungen"
+
+  priority_3:
+    dashboard: "Dashboard 3: Aggregate (Tag/Monat/Jahr)"
+    beschreibung: "Priorität 3: Aggregate mit Tages-, Monats- und Jahresauswertungen"
+    begruendung: "Unverzichtbar für langfristige Analysen"
+
+---
+# klare Reihenfolge von Messpunkt-Validierung bis Dashboard-Bau
+
+klare_reihenfolge:
+  messpunkt_validierung:
+    schritte:
+      - "Volkszähler UUIDs prüfen"
+      - "Home Assistant Entity IDs bestätigen"
+      - "Wärmepumpe-Sensoren validieren"
+      - "E-Auto Entity ID prüfen (falls vorhanden)"
+    ergebnis: "Alle Messpunkte sind validiert und bereit für die Integration"
+
+  datenquellen_integration:
+    schritte:
+      - "Volkszähler REST API einrichten"
+      - "Home Assistant API Token konfigurieren"
+      - "Wärmepumpe-Sensoren in Home Assistant hinzufügen"
+    ergebnis: "Alle Datenquellen sind im App-Container integriert"
+
+  metrik_berechnung:
+    schritte:
+      - "Current Value (aktueller Zählerstand)"
+      - "Historical Time Series (Zeitreihe)"
+      - "Daily Aggregate (Tageswerte)"
+      - "Monthly Aggregate (Monatswerte)"
+      - "Yearly Aggregate (Jahreswerte)"
+    ergebnis: "Alle Metriken sind bereitet und verfügbar"
+
+  grafana_docker_setup:
+    schritte:
+      - "Docker Compose konfigurieren"
+      - "Grafana Container starten"
+      - "Datenquelle JSON API einrichten"
+      - "Dashboard-Dateien importieren"
+    ergebnis: "Grafana-Container läuft mit Dashboards"
+
+  dashboard_bau:
+    schritte:
+      - "Dashboard 1: Live/Überblick"
+      - "Dashboard 2: Historische Verläufe"
+      - "Dashboard 3: Aggregate"
+      - "Dashboard-Dateien importieren"
+    ergebnis: "Alle Dashboards sind importiert und sichtbar"
+
+  testing:
+    schritte:
+      - "Dashboard 1: Live/Überblick testen"
+      - "Dashboard 2: Historische Verläufe testen"
+      - "Dashboard 3: Aggregate testen"
+      - "Datenkonsistenz prüfen"
+    ergebnis: "Alle Dashboards funktionieren korrekt"
+
+  deployment:
+    schritte:
+      - "Dashboards in Grafana importieren"
+      - "Zugriffsrechte konfigurieren"
+      - "Monitoring einrichten"
+    ergebnis: "Alle Dashboards sind in der Produktion"
+
+---
+# Abschluss mit allen Output-Artefakten
+
+abschluss_output:
+  application_model:
+    beschreibung: "Anwendungsmodell mit Metriken, Rohmessungen, Verantwortungen, offenen Fragen"
+    datei: "application_model.yaml"
+    inhalt: "Metriken, Quellen, Mapping, offene Fragen"
+
+  quality_and_mapping_risks:
+    beschreibung: "Qualitätsprüfung mit priorisierten Risiken und Lücken"
+    datei: "quality_and_mapping_risks.yaml"
+    inhalt: "Risiken, Lücken, Auswirkungen"
+
+  metric_and_output_model:
+    beschreibung: "Metrik- und Output-Modell mit derivation/normalization/validation je KPI"
+    datei: "metric_and_output_model.yaml"
+    inhalt: "Metrik-Definitionen, Input-Quellen, Output-Verträge, Aggregat-Logik"
+
+  grafana_delivery_model:
+    beschreibung: "Bereitstellungsmodell für Grafana mit lieferbaren Datenformen je KPI"
+    datei: "grafana_delivery_model.yaml"
+    inhalt: "Output-Kategorien, Grafana-Datasource, Visualisierung"
+
+  dashboard_konzept:
+    beschreibung: "Dashboard-Konzept + priorisierte Umsetzung"
+    datei: "dashboard_conzept.yaml"
+    inhalt: "Dashboard-Struktur, Panels, Visualisierung"
+
+  umsetzungs_plan:
+    beschreibung: "Priorisierte Umsetzung mit klaren Schritten"
+    datei: "umsetzungs_plan.yaml"
+    inhalt: "Reihenfolge, Schritte, Ergebnisse"
+
+  offene_fragen:
+    beschreibung: "Offene Fragen zur Klärung"
+    datei: "offene_fragen.yaml"
+    inhalt: "Offene Fragen, Antworten"
+
+---
+# Dashboard 1, 2, 3: klare Reihenfolge
+
+dashboard_reihenfolge:
+  dashboard_1:
+    name: "Live/Überblick"
+    beschreibung: "Live-Dashboard mit aktuellen Werten und Verläufen"
+    zeitraum: "heute, 24h, 7d, Monat, Jahr"
+    panes:
+      - aktueller_verbrauch
+      - aktueller_solarertrag
+      - waermepumpe_uebersicht
+      - verbrauchs_vergleich
+      - netz_einspeisung
+
+  dashboard_2:
+    name: "Historische Verläufe"
+    beschreibung: "Historische Zeitreihen mit Filterung nach Zeiträumen"
+    zeitraum: "heute, 24h, 7d, Monat, Jahr, frei"
+    panes:
+      - haus_gesamt_verlauf
+      - waermepumpe_verlauf
+      - solarertrag_verlauf
+      - verbrauchs_trends
+      - jahresverlauf
+
+  dashboard_3:
+    name: "Aggregate (Tag/Monat/Jahr)"
+    beschreibung: "Aggregate mit Tages-, Monats- und Jahresauswertungen"
+    zeitraum: "Täglich, Wöchentlich, Monatlich, Jährlich"
+    panes:
+      - tagesaggregate
+      - monatsaggregate
+      - jahresaggregate
+      - waermepumpe_aggregate
+      - solar_aggregate
+
+  klare_reihenfolge:
+    beschreibung: "Reihenfolge von Messpunkt-Validierung bis Dashboard-Bau"
+    schritte:
+      - "Messpunkt-Validierung"
+      - "Datenquellen-Integration"
+      - "Metrik-Berechnung"
+      - "Grafana-Docker-Setup"
+      - "Dashboard-Bau"
+      - "Testing"
+      - "Deployment"

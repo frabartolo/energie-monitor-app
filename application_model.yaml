@@ -1,0 +1,190 @@
+# 📊 Application Model - Energie-Monitor App
+# Erstellt von Agent-1 (Anwendungs- und Quellenanalyst)
+# Datum: 2026-05-05
+
+---
+# Metriken und ihre Definitionen
+metriken:
+  haus_gesamt:
+    name: Haus-Gesamtverbrauch
+    description: Gesamte Stromverbräuche des Hauses aus dem Volkszähler
+    unit: kWh
+    source:
+      type: volkszaehler
+      uuid: 159efc60-8536-11ee-a109-71c0d1e154eb
+      endpoint: GET /{uuid}
+      method: get_current
+    messart: cumulative_energy
+    historische_daten:
+      beginn: alle_verfuegbaren_daten
+      ende: jetzt
+      granularitaet: 1_5_minuten
+
+  pv:
+    name: Solaranlage
+    description: Solarerzeugung und Einspeisung
+    unit: kWh
+    source:
+      type: volkszaehler
+      uuid: c8119ba0-8536-11ee-94b9-f18aaef3a040
+      endpoint: GET /{uuid}
+      method: get_current
+    messart: cumulative_energy
+    historische_daten:
+      beginn: alle_verfuegbaren_daten
+      ende: jetzt
+      granularitaet: 1_5_minuten
+
+  waermepumpe:
+    name: Wärmepumpe
+    description: Gesamtverbrauch der Wärmepumpe (aus KEBA API über Home Assistant)
+    unit: kWh
+    source:
+      type: homeassistant
+      entity_id: sensor.keba_keenergy_33704686_heat_pump_total_energy_consumption
+      api_endpoint: GET /api/states/{entity_id}
+    messart: cumulative_energy
+    historische_daten:
+      beginn: alle_verfuegbaren_daten
+      ende: jetzt
+      granularitaet: 5_minuten
+
+  waermepumpe_heizung:
+    name: Wärmepumpe - Heizung
+    description: Heiz-Energieverbrauch der Wärmepumpe
+    unit: kWh
+    source:
+      type: homeassistant
+      entity_id: sensor.keba_keenergy_33704686_heat_pump_heating_energy_consumption
+      api_endpoint: GET /api/states/{entity_id}
+    messart: cumulative_energy
+    historische_daten:
+      beginn: alle_verfuegbaren_daten
+      ende: jetzt
+      granularitaet: 5_minuten
+
+  waermepumpe_kuehlen:
+    name: Wärmepumpe - Kühlen
+    description: Kühl-Energieverbrauch der Wärmepumpe
+    unit: kWh
+    source:
+      type: homeassistant
+      entity_id: sensor.keba_keenergy_33704686_heat_pump_cooling_energy_consumption
+      api_endpoint: GET /api/states/{entity_id}
+    messart: cumulative_energy
+    historische_daten:
+      beginn: alle_verfuegbaren_daten
+      ende: jetzt
+      granularitaet: 5_minuten
+
+  waermepumpe_warmwasser:
+    name: Wärmepumpe - Warmwasser
+    description: Warmwasser-Energieverbrauch der Wärmepumpe
+    unit: kWh
+    source:
+      type: homeassistant
+      entity_id: sensor.keba_keenergy_33704686_heat_pump_hot_water_energy_consumption
+      api_endpoint: GET /api/states/{entity_id}
+    messart: cumulative_energy
+    historische_daten:
+      beginn: alle_verfuegbaren_daten
+      ende: jetzt
+      granularitaet: 5_minuten
+
+---
+# Output-Kategorien pro Metrik
+output_kategorien:
+  current_value:
+    description: Aktueller Zählerstand (kWh)
+    endpoint: GET /api/v1/metrics/{metric_id}/current
+    format: float
+
+  historical_timeseries:
+    description: Historische Zeitreihe mit Start- und Endzeitpunkt
+    endpoint: GET /api/v1/metrics/{metric_id}/timeseries?start={start}&end={end}
+    format: array[{"timestamp": ISO8601, "value": float, "unit": kWh}]
+    filterung: grafana-steuerbar
+
+  daily_aggregate:
+    description: Tagesaggregate (Verbrauch pro Tag in kWh)
+    endpoint: GET /api/v1/metrics/{metric_id}/aggregate/daily?start={start}&end={end}
+    format: array[{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+    aggregation: sum_per_day_utc
+
+  monthly_aggregate:
+    description: Monatsaggregate
+    endpoint: GET /api/v1/metrics/{metric_id}/aggregate/monthly?start={start}&end={end}
+    format: array[{"month": YYYY-MM, "value": float, "unit": kWh}]
+    aggregation: sum_per_month_utc
+
+  yearly_aggregate:
+    description: Jahresaggregate
+    endpoint: GET /api/v1/metrics/{metric_id}/aggregate/yearly?start={start}&end={end}
+    format: array[{"year": YYYY, "value": float, "unit": kWh}]
+    aggregation: sum_per_year_utc
+
+---
+# Zeitzonen und Zeit-Handling
+zeit_handling:
+  timezone: Europe/Berlin
+  utc_offset: +02:00 (Sommerzeit) / +01:00 (Winterzeit)
+  historische_daten:
+    umwandlung_zeit: auf_zeitpunkt_der_ermittlung
+    timezone_erhaltung: true
+
+---
+# Reset-Logik
+reset_logik:
+  volkszaehler:
+    erkennt_reset: ja
+    method: heuristik
+    beschreibung: Vergleich vorheriger und aktueller Werte; bei Sprung > 90% des maximalen Werts wird ein Reset angenommen
+
+  homeassistant:
+    erkennt_reset: nein
+    beschreibung: Home Assistant Sensoren liefern kumulative Werte ohne Resets; Lücken werden mit NULL-Werten behandelt
+
+---
+# Messpunkt-Mapping
+messpunkte:
+  haus_gesamt:
+    source: volkszaehler
+    entity: 159efc60-8536-11ee-a109-71c0d1e154eb
+    ha_entity: null
+    volkszaehler_uuid: 159efc60-8536-11ee-a109-71c0d1e154eb
+
+  pv:
+    source: volkszaehler
+    entity: c8119ba0-8536-11ee-94b9-f18aaef3a040
+    ha_entity: null
+    volkszaehler_uuid: c8119ba0-8536-11ee-94b9-f18aaef3a040
+
+  waermepumpe:
+    source: homeassistant
+    entity: sensor.keba_keenergy_33704686_heat_pump_total_energy_consumption
+    ha_entity: sensor.keba_keenergy_33704686_heat_pump_total_energy_consumption
+    volkszaehler_uuid: null
+
+---
+# Verantwortungen
+verantwortungen:
+  app_container:
+    rohdaten_lesen: true
+    messpunkte_zuordnen: true
+    einheiten_normalisieren: true
+    kennzahlen_berechnen: true
+    current_values_liefen: true
+    timeseries_liefen: true
+    aggregates_liefen: true
+    dashboard_bau: false
+
+  grafana_container:
+    rohdaten_lesen: false
+    messpunkte_zuordnen: false
+    einheiten_normalisieren: false
+    kennzahlen_berechnen: false
+    current_values_liefen: false
+    timeseries_liefen: false
+    aggregates_liefen: false
+    dashboard_bau: true
+    zeitraumsteuerung: true

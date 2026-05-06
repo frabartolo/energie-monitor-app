@@ -1,0 +1,398 @@
+# 📦 Grafana Delivery Model
+# Erstellt von Agent-4 (Bereitstellungsdesigner für Grafana)
+# Datum: 2026-05-05
+
+---
+# Grafana-Delivery-Model für jede Metrik
+
+grafana_delivery_model:
+  haus_gesamt:
+    metrik_name: haus_gesamt
+    name: Haus-Gesamtverbrauch
+    beschreibung: Gesamte Stromverbräuche des Hauses aus dem Volkszähler
+    unit: kWh
+
+    output_kategorien:
+      current_value:
+        endpoint: GET /api/v1/metrics/haus_gesamt/current
+        json_format: {"metric_id": string, "timestamp": ISO8601, "value": float, "unit": kWh}
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/haus_gesamt/current"
+          timeout: 30_s
+        visualization:
+          type: "stat"
+          title: "Aktueller Hausverbrauch"
+          unit: "kWh"
+
+      historical_timeseries:
+        endpoint: GET /api/v1/metrics/haus_gesamt/timeseries?start={start}&end={end}
+        json_format: [{"timestamp": ISO8601, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/haus_gesamt/timeseries?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "graph"
+          title: "Hausverbrauch Verlauf"
+          unit: "kWh"
+          x_axis: "timestamp"
+          y_axis: "value"
+
+      daily_aggregate:
+        endpoint: GET /api/v1/metrics/haus_gesamt/aggregate/daily?start={start}&end={end}
+        json_format: [{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/haus_gesamt/aggregate/daily?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "barchart"
+          title: "Täglicher Hausverbrauch"
+          unit: "kWh"
+          x_axis: "date"
+          y_axis: "value"
+
+      monthly_aggregate:
+        endpoint: GET /api/v1/metrics/haus_gesamt/aggregate/monthly?start={start}&end={end}
+        json_format: [{"month": YYYY-MM, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/haus_gesamt/aggregate/monthly?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "barchart"
+          title: "Monatlicher Hausverbrauch"
+          unit: "kWh"
+          x_axis: "month"
+          y_axis: "value"
+
+      yearly_aggregate:
+        endpoint: GET /api/v1/metrics/haus_gesamt/aggregate/yearly?start={start}&end={end}
+        json_format: [{"year": YYYY, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/haus_gesamt/aggregate/yearly?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "barchart"
+          title: "Jährlicher Hausverbrauch"
+          unit: "kWh"
+          x_axis: "year"
+          y_axis: "value"
+
+  pv:
+    metrik_name: pv
+    name: Solaranlage
+    beschreibung: Solarerzeugung und Einspeisung
+    unit: kWh
+
+    output_kategorien:
+      current_value:
+        endpoint: GET /api/v1/metrics/pv/current
+        json_format: {"metric_id": string, "timestamp": ISO8601, "value": float, "unit": kWh}
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/pv/current"
+          timeout: 30_s
+        visualization:
+          type: "stat"
+          title: "Aktueller Solarertrag"
+          unit: "kWh"
+
+      historical_timeseries:
+        endpoint: GET /api/v1/metrics/pv/timeseries?start={start}&end={end}
+        json_format: [{"timestamp": ISO8601, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/pv/timeseries?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "graph"
+          title: "Solarertrag Verlauf"
+          unit: "kWh"
+          x_axis: "timestamp"
+          y_axis: "value"
+
+      daily_aggregate:
+        endpoint: GET /api/v1/metrics/pv/aggregate/daily?start={start}&end={end}
+        json_format: [{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/pv/aggregate/daily?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "barchart"
+          title: "Täglicher Solarertrag"
+          unit: "kWh"
+          x_axis: "date"
+          y_axis: "value"
+
+      monthly_aggregate:
+        endpoint: GET /api/v1/metrics/pv/aggregate/monthly?start={start}&end={end}
+        json_format: [{"month": YYYY-MM, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/pv/aggregate/monthly?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "barchart"
+          title: "Monatlicher Solarertrag"
+          unit: "kWh"
+          x_axis: "month"
+          y_axis: "value"
+
+      yearly_aggregate:
+        endpoint: GET /api/v1/metrics/pv/aggregate/yearly?start={start}&end={end}
+        json_format: [{"year": YYYY, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/pv/aggregate/yearly?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "barchart"
+          title: "Jährlicher Solarertrag"
+          unit: "kWh"
+          x_axis: "year"
+          y_axis: "value"
+
+  waermepumpe:
+    metrik_name: waermepumpe
+    name: Wärmepumpe
+    beschreibung: Gesamtverbrauch der Wärmepumpe
+    unit: kWh
+
+    output_kategorien:
+      current_value:
+        endpoint: GET /api/v1/metrics/waermepumpe/current
+        json_format: {"metric_id": string, "timestamp": ISO8601, "value": float, "unit": kWh}
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/waermepumpe/current"
+          timeout: 30_s
+        visualization:
+          type: "stat"
+          title: "Aktueller Wärmepumpenverbrauch"
+          unit: "kWh"
+
+      historical_timeseries:
+        endpoint: GET /api/v1/metrics/waermepumpe/timeseries?start={start}&end={end}
+        json_format: [{"timestamp": ISO8601, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/waermepumpe/timeseries?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "graph"
+          title: "Wärmepumpenverbrauch Verlauf"
+          unit: "kWh"
+          x_axis: "timestamp"
+          y_axis: "value"
+
+      daily_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe/aggregate/daily?start={start}&end={end}
+        json_format: [{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/waermepumpe/aggregate/daily?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "barchart"
+          title: "Täglicher Wärmepumpenverbrauch"
+          unit: "kWh"
+          x_axis: "date"
+          y_axis: "value"
+
+      monthly_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe/aggregate/monthly?start={start}&end={end}
+        json_format: [{"month": YYYY-MM, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/waermepumpe/aggregate/monthly?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "barchart"
+          title: "Monatlicher Wärmepumpenverbrauch"
+          unit: "kWh"
+          x_axis: "month"
+          y_axis: "value"
+
+      yearly_aggregate:
+        endpoint: GET /api/v1/metrics/waermepumpe/aggregate/yearly?start={start}&end={end}
+        json_format: [{"year": YYYY, "value": float, "unit": kWh}]
+        grafana_datasource:
+          type: "JSON"
+          query: "{'queryType': 'query', 'refId': 'A'}"
+          datasource_url: "http://homeassistant.local:8081"
+          url: "http://homeassistant.local:8081/api/v1/metrics/waermepumpe/aggregate/yearly?start={start}&end={end}"
+          timeout: 30_s
+        visualization:
+          type: "barchart"
+          title: "Jährlicher Wärmepumpenverbrauch"
+          unit: "kWh"
+          x_axis: "year"
+          y_axis: "value"
+
+---
+# Zeitraumfähigkeit
+
+zeitraumfahigkeit:
+  current_value:
+    beschreibung: Immer verfügbar (aktueller Wert)
+    grafana_steuerung: "kein Zeitraum nötig"
+
+  historical_timeseries:
+    beschreibung: Zeitraum von Grafana steuerbar (heute, 24h, 7d, Monat, Jahr, frei)
+    grafana_parameter:
+      start: "ISO8601-String"
+      end: "ISO8601-String"
+    grafana_datasource:
+      type: "JSON"
+      query: "{'queryType': 'query', 'refId': 'A'}"
+
+  daily_aggregate:
+    beschreibung: Grafana steuert Zeiträume für Tagesaggregate
+    grafana_parameter:
+      start: "YYYY-MM-DD"
+      end: "YYYY-MM-DD"
+    grafana_datasource:
+      type: "JSON"
+      query: "{'queryType': 'query', 'refId': 'A'}"
+
+  monthly_aggregate:
+    beschreibung: Grafana steuert Zeiträume für Monatsaggregate
+    grafana_parameter:
+      start: "YYYY-MM"
+      end: "YYYY-MM"
+    grafana_datasource:
+      type: "JSON"
+      query: "{'queryType': 'query', 'refId': 'A'}"
+
+  yearly_aggregate:
+    beschreibung: Grafana steuert Zeiträume für Jahresaggregate
+    grafana_parameter:
+      start: "YYYY"
+      end: "YYYY"
+    grafana_datasource:
+      type: "JSON"
+      query: "{'queryType': 'query', 'refId': 'A'}"
+
+---
+# Konsumierbar ohne komplexe Grafana-Transformationen
+
+konsumierbar:
+  json_api_datasource:
+    typ: "JSON"
+    url: "http://homeassistant.local:8081"
+    timeout: 30_s
+
+  output_format:
+    current_value:
+      typ: "JSON"
+      format: {"metric_id": string, "timestamp": ISO8601, "value": float, "unit": kWh}
+    historical_timeseries:
+      typ: "JSON"
+      format: [{"timestamp": ISO8601, "value": float, "unit": kWh}]
+    daily_aggregate:
+      typ: "JSON"
+      format: [{"date": YYYY-MM-DD, "value": float, "unit": kWh}]
+    monthly_aggregate:
+      typ: "JSON"
+      format: [{"month": YYYY-MM, "value": float, "unit": kWh}]
+    yearly_aggregate:
+      typ: "JSON"
+      format: [{"year": YYYY, "value": float, "unit": kWh}]
+
+  grafana_visualisierung:
+    current_value: "stat"
+    historical_timeseries: "graph"
+    daily_aggregate: "barchart"
+    monthly_aggregate: "barchart"
+    yearly_aggregate: "barchart"
+
+---
+# Pro KPI alle fünf Output-Kategorien
+
+alle_fuenf_output_kategorien:
+  haus_gesamt:
+    current_value: true
+    historical_timeseries: true
+    daily_aggregate: true
+    monthly_aggregate: true
+    yearly_aggregate: true
+
+  pv:
+    current_value: true
+    historical_timeseries: true
+    daily_aggregate: true
+    monthly_aggregate: true
+    yearly_aggregate: true
+
+  waermepumpe:
+    current_value: true
+    historical_timeseries: true
+    daily_aggregate: true
+    monthly_aggregate: true
+    yearly_aggregate: true
+
+---
+# Zeitraumfähigkeit explizit
+
+zeitraum_fahigkeit_explizit:
+  haus_gesamt:
+    current_value: "immer verfügbar"
+    historical_timeseries: "heute, 24h, 7d, Monat, Jahr, frei"
+    daily_aggregate: "heute, 24h, 7d, Monat, Jahr, frei"
+    monthly_aggregate: "heute, 24h, 7d, Monat, Jahr, frei"
+    yearly_aggregate: "heute, 24h, 7d, Monat, Jahr, frei"
+
+  pv:
+    current_value: "immer verfügbar"
+    historical_timeseries: "heute, 24h, 7d, Monat, Jahr, frei"
+    daily_aggregate: "heute, 24h, 7d, Monat, Jahr, frei"
+    monthly_aggregate: "heute, 24h, 7d, Monat, Jahr, frei"
+    yearly_aggregate: "heute, 24h, 7d, Monat, Jahr, frei"
+
+  waermepumpe:
+    current_value: "immer verfügbar"
+    historical_timeseries: "heute, 24h, 7d, Monat, Jahr, frei"
+    daily_aggregate: "heute, 24h, 7d, Monat, Jahr, frei"
+    monthly_aggregate: "heute, 24h, 7d, Monat, Jahr, frei"
+    yearly_aggregate: "heute, 24h, 7d, Monat, Jahr, frei"
+
+---
+# Konsumierbar ohne komplexe Grafana-Transformationen
+
+konsumierbar_verifikation:
+  keine_grafana_transformation: true
+  json_api_datasource: "direkte Verbindung zur API"
+  output_format: "konsistentes JSON-Format"
+  grafana_visualisierung: "vordefinierte Chart-Typen"
