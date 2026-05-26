@@ -16,6 +16,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         volkszaehler_base_url="http://volkszaehler.local:8080",
         volkszaehler_uuid_haus="uuid-haus",
         volkszaehler_uuid_pv="uuid-pv",
+        volkszaehler_raw_unit="kWh",
         request_timeout_seconds=1,
     )
 

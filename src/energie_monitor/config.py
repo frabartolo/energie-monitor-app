@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -23,8 +24,13 @@ class Settings(BaseSettings):
     )
 
     volkszaehler_base_url: str | None = Field(default=None, description="Middleware-Basis, z.B. http://volkszaehler:8080")
-    volkszaehler_uuid_haus: str | None = Field(default=None, description="UUID Hauptzähler (kumulativ kWh)")
-    volkszaehler_uuid_pv: str | None = Field(default=None, description="UUID PV-Erzeugung (kumulativ kWh)")
+    volkszaehler_uuid_haus: str | None = Field(default=None, description="UUID Hauptzähler (kumulativ)")
+    volkszaehler_uuid_pv: str | None = Field(default=None, description="UUID PV-Erzeugung (kumulativ)")
+    volkszaehler_raw_unit: Literal["Wh", "kWh"] = Field(
+        default="Wh",
+        description="Einheit der absoluten Zählerstände aus Volkszähler; API normalisiert nach kWh",
+        validation_alias=AliasChoices("VOLKSZAEHLER_RAW_UNIT", "VOLKSZAEHLER_VALUE_UNIT"),
+    )
 
     heat_pump_api_base_url: str | None = Field(
         default=None,

@@ -8,6 +8,13 @@ import httpx
 from energie_monitor.config import Settings
 
 
+def volkszaehler_value_to_kwh(settings: Settings, raw: float) -> float:
+    """Volkszähler-Kanäle liefern hier Wh; Middleware/API sprechen kWh."""
+    if settings.volkszaehler_raw_unit == "Wh":
+        return raw / 1000.0
+    return raw
+
+
 def _ms(dt: datetime) -> int:
     return int(dt.astimezone(UTC).timestamp() * 1000)
 
@@ -47,7 +54,7 @@ async def vz_get_tuples(
         ts_ms, val = item[0], item[1]
         try:
             ts = datetime.fromtimestamp(int(ts_ms) / 1000.0, tz=UTC)
-            v = float(val)
+            v = volkszaehler_value_to_kwh(settings, float(val))
         except (TypeError, ValueError, OSError):
             continue
         out.append((ts, v))
