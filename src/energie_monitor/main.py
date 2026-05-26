@@ -130,6 +130,17 @@ async def metric_yearly(
     return await svc.yearly(metric_id, start, end)
 
 
+@app.get("/api/v1/energy/wallbox-split", response_model=dict)
+async def energy_wallbox_split(
+    svc: Annotated[MetricService, Depends(metric_service)],
+    start: datetime = Query(..., description="Zeitraumstart"),
+    end: datetime = Query(..., description="Zeitraumende"),
+):
+    if end.astimezone(UTC) <= start.astimezone(UTC):
+        raise HTTPException(status_code=400, detail="end muss nach start liegen.")
+    return await svc.wallbox_split(start, end)
+
+
 @app.get("/api/v1/metrics/{metric_id}/window-total", response_model=dict)
 async def metric_window_total(
     metric_id: MetricIdPath,

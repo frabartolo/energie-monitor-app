@@ -70,10 +70,17 @@ class MetricService:
             ),
             MetricCatalogEntry(
                 id=MetricId.eauto,
-                label="E-Auto (Shelly 3EM / HA)",
+                label="Wallbox / E-Auto (HA)",
                 unit="kWh",
                 measurement=MeasurementKind.cumulative_energy_kwh,
-                source="Home Assistant",
+                source="Home Assistant (z. B. Shelly 3EM an der Wallbox)",
+            ),
+            MetricCatalogEntry(
+                id=MetricId.haus_ohne_eauto,
+                label="Haus ohne Wallbox (berechnet)",
+                unit="kWh",
+                measurement=MeasurementKind.cumulative_energy_kwh,
+                source="Volkszähler Haus minus Wallbox-Verbrauch im Zeitraum",
             ),
         ]
         for mid, label in _WP_CATALOG:
@@ -107,6 +114,8 @@ class MetricService:
         return await vz.vz_get_tuples(self.client, s, s.volkszaehler_uuid_pv, start, end)
 
     async def _points(self, metric_id: MetricId, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
+        if metric_id == MetricId.haus_ohne_eauto:
+            return []
         entity_id = self._ha_entity_for(metric_id)
         if entity_id:
             return await self._points_ha_entity(entity_id, start, end)
@@ -116,8 +125,35 @@ class MetricService:
             return await self._points_pv(start, end)
         return []
 
+    @staticmethod
+    def _subtract_bucket_values(
+        base: list[AggregateBucket], sub: list[AggregateBucket]
+    ) -> list[AggregateBucket]:
+        sub_by_start = {b.period_start: b.value_kwh for b in sub}
+        out: list[AggregateBucket] = []
+        for b in base:
+            h = b.value_kwh
+            w = sub_by_start.get(b.period_start)
+            if h is None:
+                out.append(AggregateBucket(period_start=b.period_start, period_end=b.period_end, value_kwh=None))
+            elif w is None:
+                out.append(b)
+            else:
+                out.append(
+                    AggregateBucket(
+                        period_start=b.period_start,
+                        period_end=b.period_end,
+                        value_kwh=max(h - w, 0.0),
+                    )
+                )
+        return out
+
     async def current(self, metric_id: MetricId) -> CurrentValueResponse:
         now = datetime.now(tz=UTC)
+        if metric_id == MetricId.haus_ohne_eauto:
+            start = now - timedelta(days=1)
+            v = await self.window_consumption_kwh(metric_id, start, now)
+            return CurrentValueResponse(metric_id=metric_id, timestamp=now, value=v, unit="kWh")
         start = now - timedelta(days=2)
         points = await self._points(metric_id, start, now)
         if points:
@@ -139,6 +175,14 @@ class MetricService:
         return CurrentValueResponse(metric_id=metric_id, timestamp=now, value=None, unit="kWh")
 
     async def timeseries(self, metric_id: MetricId, start: datetime, end: datetime) -> TimeSeriesResponse:
+        if metric_id == MetricId.haus_ohne_eauto:
+            daily = await self.daily(metric_id, start, end)
+            points = [
+                TimeSeriesPoint(timestamp=b.period_start, value=b.value_kwh)
+                for b in daily.buckets
+                if b.value_kwh is not None
+            ]
+            return TimeSeriesResponse(metric_id=metric_id, unit="kWh", points=points)
         pts = await self._points(metric_id, start, end)
         return TimeSeriesResponse(
             metric_id=metric_id,
@@ -147,6 +191,13 @@ class MetricService:
         )
 
     async def daily(self, metric_id: MetricId, start: datetime, end: datetime) -> DailyAggregateResponse:
+        if metric_id == MetricId.haus_ohne_eauto:
+            h = await self.daily(MetricId.haus_gesamt, start, end)
+            if not self.settings.entity_id_eauto_energy:
+                return DailyAggregateResponse(metric_id=metric_id, buckets=h.buckets)
+            w = await self.daily(MetricId.eauto, start, end)
+            buckets = self._subtract_bucket_values(h.buckets, w.buckets)
+            return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
         if (
             metric_id == MetricId.waermepumpe
             and not self.settings.entity_id_waermepumpe_energy
@@ -190,6 +241,33 @@ class MetricService:
         return YearlyAggregateResponse(metric_id=metric_id, buckets=buckets)
 
     async def window_consumption_kwh(self, metric_id: MetricId, start: datetime, end: datetime) -> float | None:
+        if metric_id == MetricId.haus_ohne_eauto:
+            h = await self.window_consumption_kwh(MetricId.haus_gesamt, start, end)
+            if h is None:
+                return None
+            if not self.settings.entity_id_eauto_energy:
+                return h
+            w = await self.window_consumption_kwh(MetricId.eauto, start, end)
+            if w is None:
+                return h
+            return max(h - w, 0.0)
         pts = await self._points(metric_id, start - timedelta(days=1), end + timedelta(days=1))
         window_pts = slice_points_for_window(pts, start, end)
         return consumption_kwh_cumulative(window_pts) if len(window_pts) >= 2 else None
+
+    async def wallbox_split(self, start: datetime, end: datetime) -> dict:
+        haus = await self.window_consumption_kwh(MetricId.haus_gesamt, start, end)
+        wallbox = (
+            await self.window_consumption_kwh(MetricId.eauto, start, end)
+            if self.settings.entity_id_eauto_energy
+            else None
+        )
+        net = await self.window_consumption_kwh(MetricId.haus_ohne_eauto, start, end)
+        return {
+            "start": start,
+            "end": end,
+            "unit": "kWh",
+            "haus_gesamt_kwh": haus,
+            "wallbox_kwh": wallbox,
+            "haus_ohne_wallbox_kwh": net,
+        }
