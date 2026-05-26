@@ -28,14 +28,32 @@ from energie_monitor.sources import heat_pump as hp_api
 from energie_monitor.sources import homeassistant as ha
 from energie_monitor.sources import volkszaehler as vz
 
+_WP_CATALOG = (
+    (MetricId.waermepumpe, "Wärmepumpe – El. Energie gesamt"),
+    (MetricId.waermepumpe_heizung, "Wärmepumpe – El. Energie Heizen"),
+    (MetricId.waermepumpe_warmwasser, "Wärmepumpe – El. Energie Warmwasser"),
+    (MetricId.waermepumpe_kuehlen, "Wärmepumpe – El. Energie Kühlen"),
+)
+
 
 class MetricService:
     def __init__(self, settings: Settings, client: httpx.AsyncClient):
         self.settings = settings
         self.client = client
 
+    def _ha_entity_for(self, metric_id: MetricId) -> str | None:
+        s = self.settings
+        mapping: dict[MetricId, str | None] = {
+            MetricId.waermepumpe: s.entity_id_waermepumpe_energy,
+            MetricId.waermepumpe_heizung: s.entity_id_waermepumpe_heizung,
+            MetricId.waermepumpe_kuehlen: s.entity_id_waermepumpe_kuehlen,
+            MetricId.waermepumpe_warmwasser: s.entity_id_waermepumpe_warmwasser,
+            MetricId.eauto: s.entity_id_eauto_energy,
+        }
+        return mapping.get(metric_id)
+
     def catalog(self) -> list[MetricCatalogEntry]:
-        return [
+        entries = [
             MetricCatalogEntry(
                 id=MetricId.haus_gesamt,
                 label="Haus-Gesamtverbrauch",
@@ -51,13 +69,6 @@ class MetricService:
                 source="Volkszähler (Middleware)",
             ),
             MetricCatalogEntry(
-                id=MetricId.waermepumpe,
-                label="Wärmepumpen-Verbrauch",
-                unit="kWh",
-                measurement=MeasurementKind.cumulative_energy_kwh,
-                source="Home Assistant Entity oder optionale WP-REST-API",
-            ),
-            MetricCatalogEntry(
                 id=MetricId.eauto,
                 label="E-Auto (Shelly 3EM / HA)",
                 unit="kWh",
@@ -65,6 +76,23 @@ class MetricService:
                 source="Home Assistant",
             ),
         ]
+        for mid, label in _WP_CATALOG:
+            entries.append(
+                MetricCatalogEntry(
+                    id=mid,
+                    label=label,
+                    unit="kWh",
+                    measurement=MeasurementKind.cumulative_energy_kwh,
+                    source="Home Assistant (KEBA / M-TEC)",
+                )
+            )
+        return entries
+
+    async def _points_ha_entity(
+        self, entity_id: str, start: datetime, end: datetime
+    ) -> list[tuple[datetime, float]]:
+        rows = await ha.ha_get_history(self.client, self.settings, entity_id, start, end)
+        return ha.ha_history_to_points(rows)
 
     async def _points_haus(self, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
         s = self.settings
@@ -78,29 +106,14 @@ class MetricService:
             return []
         return await vz.vz_get_tuples(self.client, s, s.volkszaehler_uuid_pv, start, end)
 
-    async def _points_wp(self, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
-        s = self.settings
-        if s.entity_id_waermepumpe_energy:
-            rows = await ha.ha_get_history(self.client, s, s.entity_id_waermepumpe_energy, start, end)
-            return ha.ha_history_to_points(rows)
-        return []
-
-    async def _points_eauto(self, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
-        s = self.settings
-        if not s.entity_id_eauto_energy:
-            return []
-        rows = await ha.ha_get_history(self.client, s, s.entity_id_eauto_energy, start, end)
-        return ha.ha_history_to_points(rows)
-
     async def _points(self, metric_id: MetricId, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
+        entity_id = self._ha_entity_for(metric_id)
+        if entity_id:
+            return await self._points_ha_entity(entity_id, start, end)
         if metric_id == MetricId.haus_gesamt:
             return await self._points_haus(start, end)
         if metric_id == MetricId.pv:
             return await self._points_pv(start, end)
-        if metric_id == MetricId.waermepumpe:
-            return await self._points_wp(start, end)
-        if metric_id == MetricId.eauto:
-            return await self._points_eauto(start, end)
         return []
 
     async def current(self, metric_id: MetricId) -> CurrentValueResponse:
@@ -110,17 +123,9 @@ class MetricService:
         if points:
             ts, val = points[-1]
             return CurrentValueResponse(metric_id=metric_id, timestamp=ts, value=val, unit="kWh")
-        if metric_id == MetricId.waermepumpe and self.settings.entity_id_waermepumpe_energy:
-            st = await ha.ha_get_state(self.client, self.settings, self.settings.entity_id_waermepumpe_energy)
-            lc = ha.parse_ts(str(st["last_updated"]))
-            return CurrentValueResponse(
-                metric_id=metric_id,
-                timestamp=lc,
-                value=ha.ha_state_to_float(st),
-                unit="kWh",
-            )
-        if metric_id == MetricId.eauto and self.settings.entity_id_eauto_energy:
-            st = await ha.ha_get_state(self.client, self.settings, self.settings.entity_id_eauto_energy)
+        entity_id = self._ha_entity_for(metric_id)
+        if entity_id:
+            st = await ha.ha_get_state(self.client, self.settings, entity_id)
             lc = ha.parse_ts(str(st["last_updated"]))
             return CurrentValueResponse(
                 metric_id=metric_id,

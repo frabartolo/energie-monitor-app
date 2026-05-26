@@ -14,6 +14,9 @@ class MeasurementKind(str, Enum):
 class MetricId(str, Enum):
     haus_gesamt = "haus_gesamt"
     waermepumpe = "waermepumpe"
+    waermepumpe_heizung = "waermepumpe_heizung"
+    waermepumpe_kuehlen = "waermepumpe_kuehlen"
+    waermepumpe_warmwasser = "waermepumpe_warmwasser"
     eauto = "eauto"
     pv = "pv"
 

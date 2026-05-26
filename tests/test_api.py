@@ -71,6 +71,15 @@ def test_catalog_contains_pv(client: TestClient):
     assert "pv" in ids
 
 
+def test_catalog_contains_wp_submetrics(client: TestClient):
+    r = client.get("/api/v1/metrics")
+    assert r.status_code == 200
+    ids = {m["id"] for m in r.json()}
+    assert "waermepumpe_heizung" in ids
+    assert "waermepumpe_warmwasser" in ids
+    assert "waermepumpe_kuehlen" in ids
+
+
 def test_current_pv_returns_kwh_value(client: TestClient):
     r = client.get("/api/v1/metrics/pv/current")
     assert r.status_code == 200

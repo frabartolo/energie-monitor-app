@@ -45,8 +45,23 @@ class Settings(BaseSettings):
     )
     entity_id_waermepumpe_energy: str | None = Field(
         default=None,
-        description="Optional: HA Entity kumulative Energie WP; falls leer und heat_pump_api_base_url gesetzt → API",
+        description="HA: kumulative elektrische Gesamtenergie WP (M-TEC El. Energie)",
         validation_alias=AliasChoices("ENTITY_ID_WAERMEPUMPE_ENERGY", "WARMEPUMPE_SENSOR_TOTAL"),
+    )
+    entity_id_waermepumpe_heizung: str | None = Field(
+        default=None,
+        description="HA: kumulative elektrische Heizenergie",
+        validation_alias=AliasChoices("ENTITY_ID_WAERMEPUMPE_HEIZUNG", "WARMEPUMPE_SENSOR_HEIZUNG"),
+    )
+    entity_id_waermepumpe_kuehlen: str | None = Field(
+        default=None,
+        description="HA: kumulative elektrische Kühlenergie",
+        validation_alias=AliasChoices("ENTITY_ID_WAERMEPUMPE_KUEHLEN", "WARMEPUMPE_SENSOR_KUEHLEN"),
+    )
+    entity_id_waermepumpe_warmwasser: str | None = Field(
+        default=None,
+        description="HA: kumulative elektrische Warmwasserenergie",
+        validation_alias=AliasChoices("ENTITY_ID_WAERMEPUMPE_WARMWASSER", "WARMEPUMPE_SENSOR_WARMWASSER"),
     )
 
     request_timeout_seconds: float = 60.0

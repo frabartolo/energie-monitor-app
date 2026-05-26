@@ -41,7 +41,10 @@ Healthcheck: `GET http://localhost:8080/health`
 |-----------------|--------|
 | `haus_gesamt`   | Volkszähler (`VOLKSZAEHLER_UUID_HAUS`) |
 | `pv`            | Volkszähler (`VOLKSZAEHLER_UUID_PV`) |
-| `waermepumpe`   | HA-Entity `ENTITY_ID_WAERMEPUMPE_ENERGY` oder `HEAT_PUMP_API_BASE_URL` |
+| `waermepumpe`   | HA `ENTITY_ID_WAERMEPUMPE_ENERGY` (gesamt) oder `HEAT_PUMP_API_BASE_URL` |
+| `waermepumpe_heizung` | HA `ENTITY_ID_WAERMEPUMPE_HEIZUNG` |
+| `waermepumpe_warmwasser` | HA `ENTITY_ID_WAERMEPUMPE_WARMWASSER` |
+| `waermepumpe_kuehlen` | HA `ENTITY_ID_WAERMEPUMPE_KUEHLEN` |
 | `eauto`         | HA-Entity `ENTITY_ID_EAUTO_ENERGY` |
 
 ### REST-Endpunkte (Auszug)
