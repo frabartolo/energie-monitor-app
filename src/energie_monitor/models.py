@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class MeasurementKind(str, Enum):
     cumulative_energy_kwh = "cumulative_energy_kwh"
     instantaneous_power_kw = "instantaneous_power_kw"
+    instantaneous_apparent_va = "instantaneous_apparent_va"
 
 
 class MetricId(str, Enum):

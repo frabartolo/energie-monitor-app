@@ -49,6 +49,47 @@ def consumption_kwh_cumulative(points: list[tuple[datetime, float]]) -> float | 
     return total
 
 
+def energy_kwh_from_apparent_va(points: list[tuple[datetime, float]]) -> float | None:
+    """
+    Trapezintegration der Scheinleistung (VA) → kVAh.
+    API-Feld heißt value_kwh; bei 400-V-Drehstrom ist das die übliche Abrechnungsgröße aus VA.
+    """
+    if len(points) < 2:
+        return None
+    total_kva_h = 0.0
+    for i in range(1, len(points)):
+        t1, v1 = points[i - 1]
+        t2, v2 = points[i]
+        dt_h = (t2.astimezone(UTC) - t1.astimezone(UTC)).total_seconds() / 3600.0
+        if dt_h <= 0:
+            continue
+        avg_va = max((v1 + v2) / 2.0, 0.0)
+        total_kva_h += avg_va * dt_h / 1000.0
+    return total_kva_h
+
+
+def daily_buckets_from_apparent_va(
+    points: list[tuple[datetime, float]],
+    start: datetime,
+    end: datetime,
+) -> list[tuple[datetime, datetime, float | None]]:
+    start_u = _day_start_utc(start)
+    end_u = _day_start_utc(end.astimezone(UTC))
+    if end_u <= start_u:
+        return []
+    out: list[tuple[datetime, datetime, float | None]] = []
+    day = start_u
+    while day < end_u:
+        nxt = day + timedelta(days=1)
+        window_pts = slice_points_for_window(points, day, nxt - timedelta(microseconds=1))
+        if len(window_pts) < 2:
+            out.append((day, nxt, None))
+        else:
+            out.append((day, nxt, energy_kwh_from_apparent_va(window_pts)))
+        day = nxt
+    return out
+
+
 def daily_buckets_from_cumulative(
     points: list[tuple[datetime, float]],
     start: datetime,

@@ -45,14 +45,14 @@ Healthcheck: `GET http://localhost:8080/health`
 | `waermepumpe_heizung` | HA `ENTITY_ID_WAERMEPUMPE_HEIZUNG` |
 | `waermepumpe_warmwasser` | HA `ENTITY_ID_WAERMEPUMPE_WARMWASSER` |
 | `waermepumpe_kuehlen` | HA `ENTITY_ID_WAERMEPUMPE_KUEHLEN` |
-| `eauto`         | Wallbox / E-Auto – HA `ENTITY_ID_EAUTO_ENERGY` (z. B. Shelly 3EM) |
+| `eauto`         | Wallbox – HA `ENTITY_ID_EAUTO_ENERGY`; mit `EAUTO_MEASUREMENT=apparent_power_va` Integration der Shelly-Scheinleistung (VA) |
 | `haus_ohne_eauto` | berechnet: Haus-Verbrauch minus Wallbox im Zeitraum |
 
 ### REST-Endpunkte (Auszug)
 
 - `GET /api/v1/metrics` — Katalog
 - `GET /api/v1/energy/wallbox-split?start=...&end=...` — Haus / Wallbox / Haus ohne Wallbox (kWh im Zeitraum)
-- `GET /api/v1/metrics/{metric_id}/current` — aktueller Zählerstand (kWh)
+- `GET /api/v1/metrics/{metric_id}/current` — aktueller Wert (kWh oder bei Wallbox/VA: kVA Momentanleistung)
 - `GET /api/v1/metrics/{metric_id}/timeseries?start=...&end=...` — Zählerstand-Zeitreihe
 - `GET /api/v1/metrics/{metric_id}/aggregate/daily|monthly|yearly?start=...&end=...` — Verbrauch in kWh pro Periode (`start`/`end` wie in OpenAPI beschrieben; Tagesaggregate nach **UTC**-Kalendertagen)
 

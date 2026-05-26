@@ -40,8 +40,13 @@ class Settings(BaseSettings):
 
     entity_id_eauto_energy: str | None = Field(
         default=None,
-        description="HA Entity kumulative Energie E-Auto (Shelly 3EM), z.B. sensor.shelly_pro_3em_xxx_total_active_energy",
+        description="HA Entity Wallbox: kumulativer Energiezähler oder Scheinleistung (siehe EAUTO_MEASUREMENT)",
         validation_alias=AliasChoices("ENTITY_ID_EAUTO_ENERGY", "EAuto_ENTITY_ID"),
+    )
+    eauto_measurement: Literal["cumulative_energy_kwh", "apparent_power_va"] = Field(
+        default="apparent_power_va",
+        description="cumulative_energy_kwh = Zählerstand kWh; apparent_power_va = Shelly total_apparent_power (VA), Integration zu kVAh",
+        validation_alias=AliasChoices("EAUTO_MEASUREMENT", "ENTITY_ID_EAUTO_MEASUREMENT"),
     )
     entity_id_waermepumpe_energy: str | None = Field(
         default=None,

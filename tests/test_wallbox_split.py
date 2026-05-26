@@ -14,10 +14,13 @@ from energie_monitor.sources import volkszaehler as vz
 @pytest.fixture()
 def wallbox_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     get_settings.cache_clear()
+    monkeypatch.setenv("EAUTO_MEASUREMENT", "cumulative_energy_kwh")
     settings = Settings(
         volkszaehler_base_url="http://vz.local",
         volkszaehler_uuid_haus="uuid-haus",
         volkszaehler_raw_unit="kWh",
+        homeassistant_base_url="http://ha.local",
+        homeassistant_token="test-token",
         entity_id_eauto_energy="sensor.wallbox_energy",
         request_timeout_seconds=1,
     )

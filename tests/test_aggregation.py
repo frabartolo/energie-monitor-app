@@ -1,8 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from energie_monitor.aggregation import (
     consumption_kwh_cumulative,
+    daily_buckets_from_apparent_va,
     daily_buckets_from_cumulative,
+    energy_kwh_from_apparent_va,
     rollup_daily_to_monthly,
 )
 
@@ -33,6 +37,27 @@ def test_daily_buckets():
     assert len(daily) == 2
     assert daily[0][2] == 5.0
     assert daily[1][2] == 4.0
+
+
+def test_apparent_va_integration_constant_power():
+    t0 = datetime(2025, 1, 1, 0, 0, tzinfo=UTC)
+    pts = [(t0, 3000.0), (t0 + timedelta(hours=2), 3000.0)]
+    assert energy_kwh_from_apparent_va(pts) == pytest.approx(6.0)
+
+
+def test_daily_buckets_apparent_va():
+    t0 = datetime(2025, 1, 1, 0, 0, tzinfo=UTC)
+    pts = [
+        (t0, 1000.0),
+        (t0 + timedelta(hours=12), 1000.0),
+        (t0 + timedelta(days=1), 1000.0),
+        (t0 + timedelta(days=1, hours=12), 2000.0),
+    ]
+    end = datetime(2025, 1, 3, 0, 0, tzinfo=UTC)
+    daily = daily_buckets_from_apparent_va(pts, t0, end)
+    assert len(daily) == 2
+    assert daily[0][2] == pytest.approx(12.0)
+    assert daily[1][2] == pytest.approx(30.0)
 
 
 def test_monthly_rollup():

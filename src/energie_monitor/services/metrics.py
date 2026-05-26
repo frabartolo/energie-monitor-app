@@ -6,7 +6,9 @@ import httpx
 
 from energie_monitor.aggregation import (
     consumption_kwh_cumulative,
+    daily_buckets_from_apparent_va,
     daily_buckets_from_cumulative,
+    energy_kwh_from_apparent_va,
     rollup_daily_to_monthly,
     rollup_daily_to_yearly,
     slice_points_for_window,
@@ -52,6 +54,25 @@ class MetricService:
         }
         return mapping.get(metric_id)
 
+    def _eauto_apparent_va(self) -> bool:
+        return self.settings.eauto_measurement == "apparent_power_va"
+
+    def _daily_buckets_raw(
+        self, metric_id: MetricId, pts: list[tuple[datetime, float]], start: datetime, end: datetime
+    ) -> list[tuple[datetime, datetime, float | None]]:
+        if metric_id == MetricId.eauto and self._eauto_apparent_va():
+            return daily_buckets_from_apparent_va(pts, start, end)
+        return daily_buckets_from_cumulative(pts, start, end)
+
+    def _window_energy_kwh(
+        self, metric_id: MetricId, window_pts: list[tuple[datetime, float]]
+    ) -> float | None:
+        if len(window_pts) < 2:
+            return None
+        if metric_id == MetricId.eauto and self._eauto_apparent_va():
+            return energy_kwh_from_apparent_va(window_pts)
+        return consumption_kwh_cumulative(window_pts)
+
     def catalog(self) -> list[MetricCatalogEntry]:
         entries = [
             MetricCatalogEntry(
@@ -71,9 +92,17 @@ class MetricService:
             MetricCatalogEntry(
                 id=MetricId.eauto,
                 label="Wallbox / E-Auto (HA)",
-                unit="kWh",
-                measurement=MeasurementKind.cumulative_energy_kwh,
-                source="Home Assistant (z. B. Shelly 3EM an der Wallbox)",
+                unit="kVA" if self._eauto_apparent_va() else "kWh",
+                measurement=(
+                    MeasurementKind.instantaneous_apparent_va
+                    if self._eauto_apparent_va()
+                    else MeasurementKind.cumulative_energy_kwh
+                ),
+                source=(
+                    "Home Assistant Scheinleistung (VA), Tageswerte per Integration"
+                    if self._eauto_apparent_va()
+                    else "Home Assistant kumulativer Energiezähler (kWh)"
+                ),
             ),
             MetricCatalogEntry(
                 id=MetricId.haus_ohne_eauto,
@@ -154,20 +183,39 @@ class MetricService:
             start = now - timedelta(days=1)
             v = await self.window_consumption_kwh(metric_id, start, now)
             return CurrentValueResponse(metric_id=metric_id, timestamp=now, value=v, unit="kWh")
+        if metric_id == MetricId.eauto and self._eauto_apparent_va():
+            entity_id = self._ha_entity_for(metric_id)
+            if entity_id:
+                st = await ha.ha_get_state(self.client, self.settings, entity_id)
+                lc = ha.parse_ts(str(st["last_updated"]))
+                raw = ha.ha_state_to_float(st)
+                val = (raw / 1000.0) if raw is not None else None
+                return CurrentValueResponse(metric_id=metric_id, timestamp=lc, value=val, unit="kVA")
+            return CurrentValueResponse(metric_id=metric_id, timestamp=now, value=None, unit="kVA")
         start = now - timedelta(days=2)
         points = await self._points(metric_id, start, now)
         if points:
             ts, val = points[-1]
-            return CurrentValueResponse(metric_id=metric_id, timestamp=ts, value=val, unit="kWh")
+            unit = "kWh"
+            if metric_id == MetricId.eauto and self._eauto_apparent_va():
+                val = val / 1000.0 if val is not None else None
+                unit = "kVA"
+            return CurrentValueResponse(metric_id=metric_id, timestamp=ts, value=val, unit=unit)
         entity_id = self._ha_entity_for(metric_id)
         if entity_id:
             st = await ha.ha_get_state(self.client, self.settings, entity_id)
             lc = ha.parse_ts(str(st["last_updated"]))
+            raw = ha.ha_state_to_float(st)
+            unit = "kWh"
+            val = raw
+            if metric_id == MetricId.eauto and self._eauto_apparent_va():
+                val = raw / 1000.0 if raw is not None else None
+                unit = "kVA"
             return CurrentValueResponse(
                 metric_id=metric_id,
                 timestamp=lc,
-                value=ha.ha_state_to_float(st),
-                unit="kWh",
+                value=val,
+                unit=unit,
             )
         if metric_id == MetricId.waermepumpe and self.settings.heat_pump_api_base_url:
             v = await hp_api.heat_pump_energy_kwh(self.client, self.settings, now - timedelta(hours=1), now)
@@ -184,10 +232,15 @@ class MetricService:
             ]
             return TimeSeriesResponse(metric_id=metric_id, unit="kWh", points=points)
         pts = await self._points(metric_id, start, end)
+        unit = "kWh"
+        series = pts
+        if metric_id == MetricId.eauto and self._eauto_apparent_va():
+            unit = "kVA"
+            series = [(a, b / 1000.0) for a, b in pts]
         return TimeSeriesResponse(
             metric_id=metric_id,
-            unit="kWh",
-            points=[TimeSeriesPoint(timestamp=a, value=b) for a, b in pts],
+            unit=unit,
+            points=[TimeSeriesPoint(timestamp=a, value=b) for a, b in series],
         )
 
     async def daily(self, metric_id: MetricId, start: datetime, end: datetime) -> DailyAggregateResponse:
@@ -206,7 +259,7 @@ class MetricService:
             buckets = await self._daily_via_wp_api(start, end)
             return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
         pts = await self._points(metric_id, start - timedelta(days=1), end + timedelta(days=1))
-        raw = daily_buckets_from_cumulative(pts, start, end)
+        raw = self._daily_buckets_raw(metric_id, pts, start, end)
         buckets = [AggregateBucket(period_start=a, period_end=b, value_kwh=c) for a, b, c in raw]
         return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
 
@@ -253,7 +306,7 @@ class MetricService:
             return max(h - w, 0.0)
         pts = await self._points(metric_id, start - timedelta(days=1), end + timedelta(days=1))
         window_pts = slice_points_for_window(pts, start, end)
-        return consumption_kwh_cumulative(window_pts) if len(window_pts) >= 2 else None
+        return self._window_energy_kwh(metric_id, window_pts)
 
     async def wallbox_split(self, start: datetime, end: datetime) -> dict:
         haus = await self.window_consumption_kwh(MetricId.haus_gesamt, start, end)
