@@ -9,8 +9,8 @@ import httpx
 from energie_monitor.config import Settings
 
 # Große Zeiträume in einem Request lösen bei Volkszähler oft 504 aus → chunking.
-DEFAULT_CHUNK_DAYS = 5
-MAX_PARALLEL_CHUNKS = 3
+DEFAULT_CHUNK_DAYS = 3
+MAX_PARALLEL_CHUNKS = 8
 
 
 def volkszaehler_value_to_kwh(settings: Settings, raw: float) -> float:
@@ -120,13 +120,7 @@ async def vz_get_tuples(
             try:
                 return await _vz_fetch_chunk(client, settings, uuid, chunk_start, chunk_end)
             except httpx.HTTPError:
-                # Engerer Zeitraum (1 Tag), falls 5-Tage-Chunk 504 liefert
-                if chunk_end - chunk_start <= timedelta(days=1):
-                    return []
-                mid = chunk_start + (chunk_end - chunk_start) / 2
-                left = await load_one(chunk_start, mid)
-                right = await load_one(mid, chunk_end)
-                return left + right
+                return []
 
     parts = await asyncio.gather(*(load_one(a, b) for a, b in ranges))
     return _merge_points(list(parts))
