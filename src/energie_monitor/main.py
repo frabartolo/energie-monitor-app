@@ -64,6 +64,14 @@ async def runtime_error_handler(_, exc: RuntimeError):
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
+@app.exception_handler(httpx.HTTPError)
+async def httpx_error_handler(_, exc: httpx.HTTPError):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": f"Upstream-Fehler (Volkszähler/Home Assistant): {exc}"},
+    )
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok", "version": __version__}

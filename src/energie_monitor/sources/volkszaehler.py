@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import asyncio
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 
 from energie_monitor.config import Settings
+
+# Große Zeiträume in einem Request lösen bei Volkszähler oft 504 aus → chunking.
+DEFAULT_CHUNK_DAYS = 5
+MAX_PARALLEL_CHUNKS = 3
 
 
 def volkszaehler_value_to_kwh(settings: Settings, raw: float) -> float:
@@ -19,24 +24,7 @@ def _ms(dt: datetime) -> int:
     return int(dt.astimezone(UTC).timestamp() * 1000)
 
 
-async def vz_get_tuples(
-    client: httpx.AsyncClient,
-    settings: Settings,
-    uuid: str,
-    start: datetime,
-    end: datetime,
-) -> list[tuple[datetime, float]]:
-    if not settings.volkszaehler_base_url:
-        raise RuntimeError("Volkszähler ist nicht konfiguriert (VOLKSZAEHLER_BASE_URL).")
-    base = settings.volkszaehler_base_url.rstrip("/")
-    url = f"{base}/data/{uuid}.json"
-    r = await client.get(
-        url,
-        params={"from": _ms(start), "to": _ms(end)},
-        timeout=settings.request_timeout_seconds,
-    )
-    r.raise_for_status()
-    payload: dict[str, Any] = r.json()
+def _parse_tuples_from_payload(settings: Settings, payload: dict[str, Any]) -> list[tuple[datetime, float]]:
     data = payload.get("data") or {}
     tuples_raw: list[Any] = []
     if isinstance(data, dict):
@@ -58,5 +46,87 @@ async def vz_get_tuples(
         except (TypeError, ValueError, OSError):
             continue
         out.append((ts, v))
-    out.sort(key=lambda x: x[0])
     return out
+
+
+async def _vz_fetch_chunk(
+    client: httpx.AsyncClient,
+    settings: Settings,
+    uuid: str,
+    start: datetime,
+    end: datetime,
+) -> list[tuple[datetime, float]]:
+    base = settings.volkszaehler_base_url.rstrip("/")
+    url = f"{base}/data/{uuid}.json"
+    r = await client.get(
+        url,
+        params={"from": _ms(start), "to": _ms(end)},
+        timeout=settings.request_timeout_seconds,
+    )
+    r.raise_for_status()
+    return _parse_tuples_from_payload(settings, r.json())
+
+
+def _merge_points(chunks: list[list[tuple[datetime, float]]]) -> list[tuple[datetime, float]]:
+    by_ts: dict[datetime, float] = {}
+    for part in chunks:
+        for ts, val in part:
+            by_ts[ts] = val
+    return sorted(by_ts.items(), key=lambda x: x[0])
+
+
+def _chunk_ranges(
+    start: datetime, end: datetime, chunk_days: int
+) -> list[tuple[datetime, datetime]]:
+    start_u = start.astimezone(UTC)
+    end_u = end.astimezone(UTC)
+    ranges: list[tuple[datetime, datetime]] = []
+    cursor = start_u
+    step = timedelta(days=chunk_days)
+    while cursor < end_u:
+        chunk_end = min(cursor + step, end_u)
+        ranges.append((cursor, chunk_end))
+        cursor = chunk_end
+    return ranges
+
+
+async def vz_get_tuples(
+    client: httpx.AsyncClient,
+    settings: Settings,
+    uuid: str,
+    start: datetime,
+    end: datetime,
+    *,
+    chunk_days: int = DEFAULT_CHUNK_DAYS,
+) -> list[tuple[datetime, float]]:
+    if not settings.volkszaehler_base_url:
+        raise RuntimeError("Volkszähler ist nicht konfiguriert (VOLKSZAEHLER_BASE_URL).")
+    start_u = start.astimezone(UTC)
+    end_u = end.astimezone(UTC)
+    if end_u <= start_u:
+        return []
+
+    if end_u - start_u <= timedelta(days=chunk_days):
+        try:
+            return await _vz_fetch_chunk(client, settings, uuid, start_u, end_u)
+        except httpx.HTTPError:
+            return []
+
+    ranges = _chunk_ranges(start_u, end_u, chunk_days)
+    sem = asyncio.Semaphore(MAX_PARALLEL_CHUNKS)
+
+    async def load_one(chunk_start: datetime, chunk_end: datetime) -> list[tuple[datetime, float]]:
+        async with sem:
+            try:
+                return await _vz_fetch_chunk(client, settings, uuid, chunk_start, chunk_end)
+            except httpx.HTTPError:
+                # Engerer Zeitraum (1 Tag), falls 5-Tage-Chunk 504 liefert
+                if chunk_end - chunk_start <= timedelta(days=1):
+                    return []
+                mid = chunk_start + (chunk_end - chunk_start) / 2
+                left = await load_one(chunk_start, mid)
+                right = await load_one(mid, chunk_end)
+                return left + right
+
+    parts = await asyncio.gather(*(load_one(a, b) for a, b in ranges))
+    return _merge_points(list(parts))
