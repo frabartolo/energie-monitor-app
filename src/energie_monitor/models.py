@@ -71,3 +71,18 @@ class YearlyAggregateResponse(BaseModel):
     metric_id: MetricId
     unit: str = Field(default="kWh")
     buckets: list[AggregateBucket]
+
+
+class HourlyProfileBucket(BaseModel):
+    hour: int = Field(ge=0, le=23, description="Stunde 0–23 (Ortszeit)")
+    value_kwh: float | None
+
+
+class HourlyProfileResponse(BaseModel):
+    metric_id: MetricId
+    unit: str = Field(default="kWh")
+    timezone: str
+    time_from: str | None = None
+    time_to: str | None = None
+    description: str
+    buckets: list[HourlyProfileBucket]

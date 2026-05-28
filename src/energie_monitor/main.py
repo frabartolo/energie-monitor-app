@@ -10,9 +10,11 @@ from fastapi.responses import JSONResponse
 
 from energie_monitor import __version__
 from energie_monitor.config import Settings, get_settings
+from energie_monitor.aggregation import parse_clock
 from energie_monitor.models import (
     CurrentValueResponse,
     DailyAggregateResponse,
+    HourlyProfileResponse,
     MetricCatalogEntry,
     MetricId,
     MonthlyAggregateResponse,
@@ -147,6 +149,52 @@ async def energy_wallbox_split(
     if end.astimezone(UTC) <= start.astimezone(UTC):
         raise HTTPException(status_code=400, detail="end muss nach start liegen.")
     return await svc.wallbox_split(start, end)
+
+
+@app.get("/api/v1/metrics/{metric_id}/aggregate/night-daily", response_model=DailyAggregateResponse)
+async def metric_night_daily(
+    metric_id: MetricIdPath,
+    svc: Annotated[MetricService, Depends(metric_service)],
+    start: datetime = Query(..., description="Zeitraumstart"),
+    end: datetime = Query(..., description="Zeitraumende"),
+    time_from: str = Query("22:00", description="Lokale Startuhrzeit (HH oder HH:MM)"),
+    time_to: str = Query("06:00", description="Lokale Enduhrzeit; kleiner/gleich Start = über Mitternacht"),
+    timezone: str | None = Query(None, description="IANA-Zeitzone, Standard aus ENERGY_TIMEZONE"),
+):
+    if end.astimezone(UTC) <= start.astimezone(UTC):
+        raise HTTPException(status_code=400, detail="end muss nach start liegen.")
+    try:
+        tz = svc._resolve_tz(timezone)
+        t_from = parse_clock(time_from)
+        t_to = parse_clock(time_to)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await svc.night_daily(metric_id, start, end, t_from, t_to, tz)
+
+
+@app.get("/api/v1/metrics/{metric_id}/profile/hourly", response_model=HourlyProfileResponse)
+async def metric_hourly_profile(
+    metric_id: MetricIdPath,
+    svc: Annotated[MetricService, Depends(metric_service)],
+    start: datetime = Query(...),
+    end: datetime = Query(...),
+    time_from: str | None = Query(
+        None, description="Optional: nur diese Uhrzeiten (z. B. 22:00) in die Stundenstatistik"
+    ),
+    time_to: str | None = Query(None, description="Optional, z. B. 06:00 (Nacht über Mitternacht)"),
+    timezone: str | None = Query(None),
+):
+    if end.astimezone(UTC) <= start.astimezone(UTC):
+        raise HTTPException(status_code=400, detail="end muss nach start liegen.")
+    try:
+        tz = svc._resolve_tz(timezone)
+        t_from = parse_clock(time_from) if time_from else None
+        t_to = parse_clock(time_to) if time_to else None
+        if (time_from is None) != (time_to is None):
+            raise ValueError("time_from und time_to müssen gemeinsam gesetzt werden.")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await svc.hourly_profile(metric_id, start, end, tz, t_from, t_to)
 
 
 @app.get("/api/v1/metrics/{metric_id}/window-total", response_model=dict)

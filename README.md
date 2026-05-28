@@ -55,6 +55,9 @@ Healthcheck: `GET http://localhost:8080/health`
 - `GET /api/v1/metrics/{metric_id}/current` — aktueller Wert (kWh oder bei Wallbox/VA: kVA Momentanleistung)
 - `GET /api/v1/metrics/{metric_id}/timeseries?start=...&end=...` — Zählerstand-Zeitreihe
 - `GET /api/v1/metrics/{metric_id}/aggregate/daily|monthly|yearly?start=...&end=...` — Verbrauch in kWh pro Periode (`start`/`end` wie in OpenAPI beschrieben; Tagesaggregate nach **UTC**-Kalendertagen)
+- `GET /api/v1/metrics/{metric_id}/aggregate/night-daily?start=...&end=...&time_from=22:00&time_to=06:00&timezone=Europe/Berlin` — Verbrauch **pro Kalendernacht** im Uhrzeitfenster (Ortszeit)
+- `GET /api/v1/metrics/{metric_id}/profile/hourly?start=...&end=...` — mittlerer kWh-Verbrauch je Stunde (0–23); optional `time_from`/`time_to` wie oben
+- `GET /api/v1/metrics/{metric_id}/window-total?start=...&end=...` — eine Summe für beliebiges Intervall
 
 Hinweis: Für kumulative Sensoren werden Zählerresets heuristisch erkannt; Lücken ohne Messpunkte führen zu `null` in Aggregaten.
 

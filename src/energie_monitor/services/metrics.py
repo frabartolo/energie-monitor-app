@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -8,7 +9,9 @@ from energie_monitor.aggregation import (
     consumption_kwh_cumulative,
     daily_buckets_from_apparent_va,
     daily_buckets_from_cumulative,
+    daily_buckets_time_window,
     energy_kwh_from_apparent_va,
+    hourly_profile_mean_daily_kwh,
     rollup_daily_to_monthly,
     rollup_daily_to_yearly,
     slice_points_for_window,
@@ -18,6 +21,8 @@ from energie_monitor.models import (
     AggregateBucket,
     CurrentValueResponse,
     DailyAggregateResponse,
+    HourlyProfileBucket,
+    HourlyProfileResponse,
     MeasurementKind,
     MetricCatalogEntry,
     MetricId,
@@ -72,6 +77,20 @@ class MetricService:
         if metric_id == MetricId.eauto and self._eauto_apparent_va():
             return energy_kwh_from_apparent_va(window_pts)
         return consumption_kwh_cumulative(window_pts)
+
+    def _resolve_tz(self, timezone: str | None) -> ZoneInfo:
+        name = (timezone or self.settings.energy_timezone).strip()
+        try:
+            return ZoneInfo(name)
+        except Exception as exc:
+            raise ValueError(f"Unbekannte Zeitzone: {name!r}") from exc
+
+    def _use_apparent_for(self, metric_id: MetricId) -> bool:
+        return metric_id == MetricId.eauto and self._eauto_apparent_va()
+
+    async def _points_padded(self, metric_id: MetricId, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
+        pad = timedelta(days=2)
+        return await self._points(metric_id, start - pad, end + pad)
 
     def catalog(self) -> list[MetricCatalogEntry]:
         entries = [
@@ -308,6 +327,91 @@ class MetricService:
         window_pts = slice_points_for_window(pts, start, end)
         return self._window_energy_kwh(metric_id, window_pts)
 
+    async def night_daily(
+        self,
+        metric_id: MetricId,
+        start: datetime,
+        end: datetime,
+        time_from: time,
+        time_to: time,
+        tz: ZoneInfo,
+    ) -> DailyAggregateResponse:
+        if metric_id == MetricId.haus_ohne_eauto:
+            h = await self.night_daily(MetricId.haus_gesamt, start, end, time_from, time_to, tz)
+            if not self.settings.entity_id_eauto_energy:
+                return DailyAggregateResponse(metric_id=metric_id, buckets=h.buckets)
+            w = await self.night_daily(MetricId.eauto, start, end, time_from, time_to, tz)
+            buckets = self._subtract_bucket_values(h.buckets, w.buckets)
+            return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
+        pts = await self._points_padded(metric_id, start, end)
+        raw = daily_buckets_time_window(
+            pts, start, end, time_from, time_to, tz, use_apparent_va=self._use_apparent_for(metric_id)
+        )
+        buckets = [AggregateBucket(period_start=a, period_end=b, value_kwh=c) for a, b, c in raw]
+        return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
+
+    async def hourly_profile(
+        self,
+        metric_id: MetricId,
+        start: datetime,
+        end: datetime,
+        tz: ZoneInfo,
+        time_from: time | None = None,
+        time_to: time | None = None,
+    ) -> HourlyProfileResponse:
+        if metric_id == MetricId.haus_ohne_eauto:
+            h_prof = await self.hourly_profile(MetricId.haus_gesamt, start, end, tz, time_from, time_to)
+            if not self.settings.entity_id_eauto_energy:
+                return HourlyProfileResponse(
+                    metric_id=metric_id,
+                    timezone=str(tz),
+                    time_from=_clock_label(time_from),
+                    time_to=_clock_label(time_to),
+                    description=h_prof.description,
+                    buckets=h_prof.buckets,
+                )
+            w_prof = await self.hourly_profile(MetricId.eauto, start, end, tz, time_from, time_to)
+            buckets = []
+            for hb, wb in zip(h_prof.buckets, w_prof.buckets, strict=True):
+                hv, wv = hb.value_kwh, wb.value_kwh
+                if hv is None:
+                    val = None
+                elif wv is None:
+                    val = hv
+                else:
+                    val = max(hv - wv, 0.0)
+                buckets.append(HourlyProfileBucket(hour=hb.hour, value_kwh=val))
+            return HourlyProfileResponse(
+                metric_id=metric_id,
+                timezone=str(tz),
+                time_from=_clock_label(time_from),
+                time_to=_clock_label(time_to),
+                description="Mittlerer Tagesverbrauch je Stunde (Haus minus Wallbox)",
+                buckets=buckets,
+            )
+
+        pts = await self._points_padded(metric_id, start, end)
+        profile = hourly_profile_mean_daily_kwh(
+            pts,
+            start,
+            end,
+            tz,
+            use_apparent_va=self._use_apparent_for(metric_id),
+            time_from=time_from,
+            time_to=time_to,
+        )
+        desc = "Mittlerer Verbrauch pro Kalendertag je Stunde (Ortszeit)"
+        if time_from is not None and time_to is not None:
+            desc = f"{desc}; nur Daten innerhalb {time_from:%H:%M}–{time_to:%H:%M}"
+        return HourlyProfileResponse(
+            metric_id=metric_id,
+            timezone=str(tz),
+            time_from=_clock_label(time_from),
+            time_to=_clock_label(time_to),
+            description=desc,
+            buckets=[HourlyProfileBucket(hour=h, value_kwh=v) for h, v in profile],
+        )
+
     async def wallbox_split(self, start: datetime, end: datetime) -> dict:
         haus = await self.window_consumption_kwh(MetricId.haus_gesamt, start, end)
         wallbox = (
@@ -324,3 +428,9 @@ class MetricService:
             "wallbox_kwh": wallbox,
             "haus_ohne_wallbox_kwh": net,
         }
+
+
+def _clock_label(t: time | None) -> str | None:
+    if t is None:
+        return None
+    return t.strftime("%H:%M")

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 
 def _day_start_utc(d: datetime) -> datetime:
@@ -132,6 +133,172 @@ def rollup_daily_to_monthly(
         else:
             period_end = datetime(y, m + 1, 1, tzinfo=UTC)
         out.append((period_start, period_end, sums[(y, m)]))
+    return out
+
+
+def parse_clock(value: str) -> time:
+    """HH oder HH:MM (24h)."""
+    raw = value.strip()
+    if ":" in raw:
+        h_str, m_str = raw.split(":", 1)
+        return time(hour=int(h_str), minute=int(m_str))
+    return time(hour=int(raw), minute=0)
+
+
+def _local_dates_in_range(start: datetime, end: datetime, tz: ZoneInfo) -> list[date]:
+    start_u = start.astimezone(UTC)
+    end_u = end.astimezone(UTC)
+    if end_u <= start_u:
+        return []
+    cur = start.astimezone(tz).date()
+    last = (end.astimezone(tz) - timedelta(microseconds=1)).date()
+    out: list[date] = []
+    while cur <= last:
+        out.append(cur)
+        cur += timedelta(days=1)
+    return out
+
+
+def local_window_bounds(
+    day: date, time_from: time, time_to: time, tz: ZoneInfo
+) -> tuple[datetime, datetime]:
+    """Lokales Zeitfenster; time_to <= time_from bedeutet Fenster über Mitternacht."""
+    start_local = datetime.combine(day, time_from, tzinfo=tz)
+    if time_to <= time_from:
+        end_local = datetime.combine(day + timedelta(days=1), time_to, tzinfo=tz)
+    else:
+        end_local = datetime.combine(day, time_to, tzinfo=tz)
+    return start_local.astimezone(UTC), end_local.astimezone(UTC)
+
+
+def daily_buckets_time_window(
+    points: list[tuple[datetime, float]],
+    start: datetime,
+    end: datetime,
+    time_from: time,
+    time_to: time,
+    tz: ZoneInfo,
+    *,
+    use_apparent_va: bool,
+) -> list[tuple[datetime, datetime, float | None]]:
+    out: list[tuple[datetime, datetime, float | None]] = []
+    for day in _local_dates_in_range(start, end, tz):
+        w_start, w_end = local_window_bounds(day, time_from, time_to, tz)
+        if w_end.astimezone(UTC) <= start.astimezone(UTC) or w_start.astimezone(UTC) >= end.astimezone(UTC):
+            continue
+        window_pts = slice_points_for_window(points, w_start, w_end)
+        if len(window_pts) < 2:
+            val = None
+        elif use_apparent_va:
+            val = energy_kwh_from_apparent_va(window_pts)
+        else:
+            val = consumption_kwh_cumulative(window_pts)
+        period_start = datetime.combine(day, time.min, tzinfo=tz).astimezone(UTC)
+        period_end = period_start + timedelta(days=1)
+        out.append((period_start, period_end, val))
+    return out
+
+
+def _in_local_time_window(local_t: time, time_from: time | None, time_to: time | None) -> bool:
+    if time_from is None or time_to is None:
+        return True
+    if time_to <= time_from:
+        return local_t >= time_from or local_t < time_to
+    return time_from <= local_t < time_to
+
+
+def _distribute_segment_energy_to_hours(
+    t1: datetime,
+    t2: datetime,
+    energy_kwh: float,
+    tz: ZoneInfo,
+    per_day_hour: dict[date, list[float]],
+    *,
+    time_from: time | None = None,
+    time_to: time | None = None,
+) -> None:
+    if energy_kwh <= 0 or t2 <= t1:
+        return
+    total_s = (t2 - t1).total_seconds()
+    if total_s <= 0:
+        return
+    step = timedelta(minutes=1)
+    cur = t1
+    while cur < t2:
+        nxt = min(cur + step, t2)
+        local = cur.astimezone(tz)
+        if _in_local_time_window(local.time(), time_from, time_to):
+            frac = (nxt - cur).total_seconds() / total_s
+            e = energy_kwh * frac
+            d = local.date()
+            if d not in per_day_hour:
+                per_day_hour[d] = [0.0] * 24
+            per_day_hour[d][local.hour] += e
+        cur = nxt
+
+
+def hourly_profile_mean_daily_kwh(
+    points: list[tuple[datetime, float]],
+    start: datetime,
+    end: datetime,
+    tz: ZoneInfo,
+    *,
+    use_apparent_va: bool,
+    time_from: time | None = None,
+    time_to: time | None = None,
+) -> list[tuple[int, float | None]]:
+    """Mittlerer kWh-Verbrauch pro Kalendertag je Stunde (0–23, Ortszeit)."""
+    per_day_hour: dict[date, list[float]] = {}
+    if use_apparent_va:
+        for i in range(1, len(points)):
+            t1, v1 = points[i - 1]
+            t2, v2 = points[i]
+            tu1, tu2 = t1.astimezone(UTC), t2.astimezone(UTC)
+            if tu2 <= start.astimezone(UTC) or tu1 >= end.astimezone(UTC):
+                continue
+            dt_h = (tu2 - tu1).total_seconds() / 3600.0
+            if dt_h <= 0:
+                continue
+            e = max((v1 + v2) / 2.0, 0.0) * dt_h / 1000.0
+            _distribute_segment_energy_to_hours(
+                max(tu1, start.astimezone(UTC)),
+                min(tu2, end.astimezone(UTC)),
+                e,
+                tz,
+                per_day_hour,
+                time_from=time_from,
+                time_to=time_to,
+            )
+    else:
+        for i in range(1, len(points)):
+            t1, v1 = points[i - 1]
+            t2, v2 = points[i]
+            tu1, tu2 = t1.astimezone(UTC), t2.astimezone(UTC)
+            if tu2 <= start.astimezone(UTC) or tu1 >= end.astimezone(UTC):
+                continue
+            d = v2 - v1
+            reset_threshold = max(0.05 * abs(v1), 0.5)
+            if d < -reset_threshold:
+                seg_e = max(v2, 0.0)
+            else:
+                seg_e = max(d, 0.0)
+            _distribute_segment_energy_to_hours(
+                max(tu1, start.astimezone(UTC)),
+                min(tu2, end.astimezone(UTC)),
+                seg_e,
+                tz,
+                per_day_hour,
+                time_from=time_from,
+                time_to=time_to,
+            )
+
+    days = _local_dates_in_range(start, end, tz)
+    out: list[tuple[int, float | None]] = []
+    if not days:
+        return [(h, None) for h in range(24)]
+    for h in range(24):
+        total = sum(per_day_hour.get(d, [0.0] * 24)[h] for d in days)
+        out.append((h, total / len(days)))
     return out
 
 

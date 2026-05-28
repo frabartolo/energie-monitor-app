@@ -69,6 +69,12 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ENTITY_ID_WAERMEPUMPE_WARMWASSER", "WARMEPUMPE_SENSOR_WARMWASSER"),
     )
 
+    energy_timezone: str = Field(
+        default="Europe/Berlin",
+        description="Zeitzone für Nachtfenster und Stundenprofile",
+        validation_alias=AliasChoices("ENERGY_TIMEZONE", "TIMEZONE"),
+    )
+
     request_timeout_seconds: float = 60.0
 
 
