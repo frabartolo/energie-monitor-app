@@ -50,6 +50,84 @@ def consumption_kwh_cumulative(points: list[tuple[datetime, float]]) -> float | 
     return total
 
 
+LOAD_INTERVALS: dict[str, timedelta] = {
+    "5m": timedelta(minutes=5),
+    "15m": timedelta(minutes=15),
+    "1h": timedelta(hours=1),
+    "6h": timedelta(hours=6),
+    "1d": timedelta(days=1),
+}
+
+
+def choose_load_profile_interval(start: datetime, end: datetime) -> timedelta:
+    """Automatische Bucket-Größe aus Zeitraumlänge (Lastgang)."""
+    hours = max((end.astimezone(UTC) - start.astimezone(UTC)).total_seconds() / 3600.0, 0.0)
+    if hours <= 48:
+        return timedelta(minutes=15)
+    if hours <= 24 * 14:
+        return timedelta(hours=1)
+    if hours <= 24 * 120:
+        return timedelta(hours=6)
+    return timedelta(days=1)
+
+
+def resolve_load_profile_interval(name: str, start: datetime, end: datetime) -> timedelta:
+    key = name.strip().lower()
+    if key in ("auto", ""):
+        return choose_load_profile_interval(start, end)
+    if key not in LOAD_INTERVALS:
+        allowed = ", ".join(["auto", *LOAD_INTERVALS])
+        raise ValueError(f"Unbekanntes interval {name!r}. Erlaubt: {allowed}")
+    return LOAD_INTERVALS[key]
+
+
+def interval_label(bucket: timedelta) -> str:
+    for label, td in LOAD_INTERVALS.items():
+        if td == bucket:
+            return label
+    secs = int(bucket.total_seconds())
+    if secs % 86400 == 0:
+        return f"{secs // 86400}d"
+    if secs % 3600 == 0:
+        return f"{secs // 3600}h"
+    if secs % 60 == 0:
+        return f"{secs // 60}m"
+    return f"{secs}s"
+
+
+def load_profile_buckets(
+    points: list[tuple[datetime, float]],
+    start: datetime,
+    end: datetime,
+    bucket: timedelta,
+    *,
+    use_apparent_va: bool,
+) -> list[tuple[datetime, float | None, float | None]]:
+    """
+    Lastgang: (Bucket-Start UTC, mittlere Leistung kW/kVA, Energie im Bucket kWh).
+    """
+    start_u = start.astimezone(UTC)
+    end_u = end.astimezone(UTC)
+    if end_u <= start_u:
+        return []
+    out: list[tuple[datetime, float | None, float | None]] = []
+    cur = start_u
+    while cur < end_u:
+        nxt = min(cur + bucket, end_u)
+        window_pts = slice_points_for_window(points, cur, nxt)
+        if len(window_pts) < 2:
+            energy = None
+        elif use_apparent_va:
+            energy = energy_kwh_from_apparent_va(window_pts)
+        else:
+            energy = consumption_kwh_cumulative(window_pts)
+        hours = (nxt - cur).total_seconds() / 3600.0
+        power = energy / hours if energy is not None and hours > 0 else None
+        out.append((cur, power, energy))
+        cur = nxt
+    return out
+
+
 def energy_kwh_from_apparent_va(points: list[tuple[datetime, float]]) -> float | None:
     """
     Trapezintegration der Scheinleistung (VA) → kVAh.

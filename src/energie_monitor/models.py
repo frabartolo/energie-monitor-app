@@ -86,3 +86,18 @@ class HourlyProfileResponse(BaseModel):
     time_to: str | None = None
     description: str
     buckets: list[HourlyProfileBucket]
+
+
+class LoadProfilePoint(BaseModel):
+    timestamp: datetime
+    power_kw: float | None = Field(default=None, description="Mittlere Leistung im Intervall")
+    energy_kwh: float | None = Field(default=None, description="Energie im Intervall")
+
+
+class LoadProfileResponse(BaseModel):
+    metric_id: MetricId
+    unit: str = Field(default="kW", description="kW oder kVA (Wallbox Scheinleistung)")
+    interval: str
+    start: datetime
+    end: datetime
+    points: list[LoadProfilePoint]

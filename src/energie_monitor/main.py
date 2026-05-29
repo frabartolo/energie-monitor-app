@@ -15,6 +15,7 @@ from energie_monitor.models import (
     CurrentValueResponse,
     DailyAggregateResponse,
     HourlyProfileResponse,
+    LoadProfileResponse,
     MetricCatalogEntry,
     MetricId,
     MonthlyAggregateResponse,
@@ -149,6 +150,25 @@ async def energy_wallbox_split(
     if end.astimezone(UTC) <= start.astimezone(UTC):
         raise HTTPException(status_code=400, detail="end muss nach start liegen.")
     return await svc.wallbox_split(start, end)
+
+
+@app.get("/api/v1/metrics/{metric_id}/load-profile", response_model=LoadProfileResponse)
+async def metric_load_profile(
+    metric_id: MetricIdPath,
+    svc: Annotated[MetricService, Depends(metric_service)],
+    start: datetime = Query(..., description="Zeitraumstart"),
+    end: datetime = Query(..., description="Zeitraumende"),
+    interval: str = Query(
+        "auto",
+        description="Bucket-Größe: auto, 5m, 15m, 1h, 6h, 1d (auto aus Zeitraumlänge)",
+    ),
+):
+    if end.astimezone(UTC) <= start.astimezone(UTC):
+        raise HTTPException(status_code=400, detail="end muss nach start liegen.")
+    try:
+        return await svc.load_profile(metric_id, start, end, interval)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/v1/metrics/{metric_id}/aggregate/night-daily", response_model=DailyAggregateResponse)

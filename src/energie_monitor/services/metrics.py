@@ -12,6 +12,9 @@ from energie_monitor.aggregation import (
     daily_buckets_time_window,
     energy_kwh_from_apparent_va,
     hourly_profile_mean_daily_kwh,
+    interval_label,
+    load_profile_buckets,
+    resolve_load_profile_interval,
     rollup_daily_to_monthly,
     rollup_daily_to_yearly,
     slice_points_for_window,
@@ -23,6 +26,8 @@ from energie_monitor.models import (
     DailyAggregateResponse,
     HourlyProfileBucket,
     HourlyProfileResponse,
+    LoadProfilePoint,
+    LoadProfileResponse,
     MeasurementKind,
     MetricCatalogEntry,
     MetricId,
@@ -326,6 +331,64 @@ class MetricService:
         pts = await self._points(metric_id, start - timedelta(days=1), end + timedelta(days=1))
         window_pts = slice_points_for_window(pts, start, end)
         return self._window_energy_kwh(metric_id, window_pts)
+
+    async def load_profile(
+        self,
+        metric_id: MetricId,
+        start: datetime,
+        end: datetime,
+        interval: str,
+    ) -> LoadProfileResponse:
+        bucket = resolve_load_profile_interval(interval, start, end)
+        unit = "kW"
+        if metric_id == MetricId.haus_ohne_eauto:
+            h = await self.load_profile(MetricId.haus_gesamt, start, end, interval)
+            if not self.settings.entity_id_eauto_energy:
+                return LoadProfileResponse(
+                    metric_id=metric_id,
+                    unit=h.unit,
+                    interval=h.interval,
+                    start=start,
+                    end=end,
+                    points=h.points,
+                )
+            w = await self.load_profile(MetricId.eauto, start, end, interval)
+            points: list[LoadProfilePoint] = []
+            for hp, wp in zip(h.points, w.points, strict=True):
+                if hp.energy_kwh is None:
+                    e, p = None, None
+                elif wp.energy_kwh is None:
+                    e, p = hp.energy_kwh, hp.power_kw
+                else:
+                    e = max(hp.energy_kwh - wp.energy_kwh, 0.0)
+                    hours = bucket.total_seconds() / 3600.0
+                    p = e / hours if hours > 0 else None
+                points.append(LoadProfilePoint(timestamp=hp.timestamp, power_kw=p, energy_kwh=e))
+            return LoadProfileResponse(
+                metric_id=metric_id,
+                unit="kW",
+                interval=h.interval,
+                start=start,
+                end=end,
+                points=points,
+            )
+
+        pts = await self._points_padded(metric_id, start, end)
+        apparent = self._use_apparent_for(metric_id)
+        if apparent:
+            unit = "kVA"
+        raw = load_profile_buckets(pts, start, end, bucket, use_apparent_va=apparent)
+        points = [
+            LoadProfilePoint(timestamp=ts, power_kw=p, energy_kwh=e) for ts, p, e in raw
+        ]
+        return LoadProfileResponse(
+            metric_id=metric_id,
+            unit=unit,
+            interval=interval_label(bucket),
+            start=start,
+            end=end,
+            points=points,
+        )
 
     async def night_daily(
         self,
