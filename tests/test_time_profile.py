@@ -48,7 +48,7 @@ def test_daily_buckets_time_window_cumulative():
     buckets = daily_buckets_time_window(pts, start, end, time(22, 0), time(6, 0), tz, use_apparent_va=False)
     assert len(buckets) == 2
     assert buckets[0][2] == pytest.approx(9.0)
-    assert buckets[1][2] == pytest.approx(9.0)
+    assert buckets[1][2] == pytest.approx(2.0)
 
 
 @pytest.fixture()

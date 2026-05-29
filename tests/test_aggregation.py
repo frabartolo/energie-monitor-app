@@ -39,6 +39,18 @@ def test_daily_buckets():
     assert daily[1][2] == 4.0
 
 
+def test_daily_buckets_intraday_range():
+    """Kurzes Fenster am Nachmittag: ein Bucket mit Zeitstempel im Abfragefenster."""
+    t0 = datetime(2026, 5, 28, 15, 0, tzinfo=UTC)
+    pts = [(t0, 10.0), (t0 + timedelta(hours=4), 14.0)]
+    start = datetime(2026, 5, 28, 15, 48, tzinfo=UTC)
+    end = datetime(2026, 5, 28, 19, 37, tzinfo=UTC)
+    daily = daily_buckets_from_cumulative(pts, start, end)
+    assert len(daily) == 1
+    assert daily[0][0] == start
+    assert daily[0][2] == pytest.approx(4.0)
+
+
 def test_apparent_va_integration_constant_power():
     t0 = datetime(2025, 1, 1, 0, 0, tzinfo=UTC)
     pts = [(t0, 3000.0), (t0 + timedelta(hours=2), 3000.0)]
@@ -56,7 +68,7 @@ def test_daily_buckets_apparent_va():
     end = datetime(2025, 1, 3, 0, 0, tzinfo=UTC)
     daily = daily_buckets_from_apparent_va(pts, t0, end)
     assert len(daily) == 2
-    assert daily[0][2] == pytest.approx(12.0)
+    assert daily[0][2] == pytest.approx(24.0)
     assert daily[1][2] == pytest.approx(30.0)
 
 

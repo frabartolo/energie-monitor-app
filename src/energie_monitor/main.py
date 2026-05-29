@@ -99,10 +99,11 @@ async def metric_timeseries(
     svc: Annotated[MetricService, Depends(metric_service)],
     start: datetime = Query(..., description="Beginn (ISO-8601, TZ empfohlen)"),
     end: datetime = Query(..., description="Ende (ISO-8601)"),
+    max_points: int = Query(800, ge=50, le=5000, description="Max. Punkte (Downsampling für Grafana)"),
 ):
     if end.astimezone(UTC) <= start.astimezone(UTC):
         raise HTTPException(status_code=400, detail="end muss nach start liegen.")
-    return await svc.timeseries(metric_id, start, end)
+    return await svc.timeseries(metric_id, start, end, max_points=max_points)
 
 
 @app.get("/api/v1/metrics/{metric_id}/aggregate/daily", response_model=DailyAggregateResponse)

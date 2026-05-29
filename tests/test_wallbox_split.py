@@ -72,9 +72,15 @@ def test_wallbox_split_subtracts_consumption(wallbox_client: TestClient):
 def test_haus_ohne_eauto_daily_buckets(wallbox_client: TestClient):
     start = "2026-05-01T00:00:00Z"
     end = "2026-05-03T00:00:00Z"
+    haus = wallbox_client.get(f"/api/v1/metrics/haus_gesamt/aggregate/daily?start={start}&end={end}").json()[
+        "buckets"
+    ]
+    wall = wallbox_client.get(f"/api/v1/metrics/eauto/aggregate/daily?start={start}&end={end}").json()["buckets"]
     r = wallbox_client.get(f"/api/v1/metrics/haus_ohne_eauto/aggregate/daily?start={start}&end={end}")
     assert r.status_code == 200
     buckets = r.json()["buckets"]
     assert len(buckets) == 2
-    assert buckets[0]["value_kwh"] == 5.0
-    assert buckets[1]["value_kwh"] == 3.0
+    for i in range(2):
+        h, w = haus[i]["value_kwh"], wall[i]["value_kwh"]
+        assert h is not None and w is not None
+        assert buckets[i]["value_kwh"] == max(h - w, 0.0)

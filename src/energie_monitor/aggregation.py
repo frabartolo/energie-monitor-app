@@ -10,6 +10,34 @@ def _day_start_utc(d: datetime) -> datetime:
     return datetime(x.year, x.month, x.day, tzinfo=UTC)
 
 
+def _calendar_days_in_range(start: datetime, end: datetime) -> list[datetime]:
+    """UTC-Kalendertage, die mit [start, end) überlappen (end exklusiv)."""
+    start_u = start.astimezone(UTC)
+    end_u = end.astimezone(UTC)
+    if end_u <= start_u:
+        return []
+    first = _day_start_utc(start_u)
+    last = _day_start_utc(end_u - timedelta(microseconds=1))
+    days: list[datetime] = []
+    day = first
+    while day <= last:
+        days.append(day)
+        day += timedelta(days=1)
+    return days
+
+
+def _clip_period_to_query(
+    period_start: datetime, period_end: datetime, start: datetime, end: datetime
+) -> tuple[datetime, datetime] | None:
+    start_u = start.astimezone(UTC)
+    end_u = end.astimezone(UTC)
+    ps = max(period_start.astimezone(UTC), start_u)
+    pe = min(period_end.astimezone(UTC), end_u)
+    if pe <= ps:
+        return None
+    return ps, pe
+
+
 def slice_points_for_window(
     points: list[tuple[datetime, float]],
     start: datetime,
@@ -152,20 +180,18 @@ def daily_buckets_from_apparent_va(
     start: datetime,
     end: datetime,
 ) -> list[tuple[datetime, datetime, float | None]]:
-    start_u = _day_start_utc(start)
-    end_u = _day_start_utc(end.astimezone(UTC))
-    if end_u <= start_u:
-        return []
     out: list[tuple[datetime, datetime, float | None]] = []
-    day = start_u
-    while day < end_u:
+    for day in _calendar_days_in_range(start, end):
         nxt = day + timedelta(days=1)
-        window_pts = slice_points_for_window(points, day, nxt - timedelta(microseconds=1))
+        clipped = _clip_period_to_query(day, nxt, start, end)
+        if clipped is None:
+            continue
+        ps, pe = clipped
+        window_pts = slice_points_for_window(points, ps, pe)
         if len(window_pts) < 2:
-            out.append((day, nxt, None))
+            out.append((ps, pe, None))
         else:
-            out.append((day, nxt, energy_kwh_from_apparent_va(window_pts)))
-        day = nxt
+            out.append((ps, pe, energy_kwh_from_apparent_va(window_pts)))
     return out
 
 
@@ -175,23 +201,21 @@ def daily_buckets_from_cumulative(
     end: datetime,
 ) -> list[tuple[datetime, datetime, float | None]]:
     """
-    Liefert pro Kalendertag (UTC) [day_start, day_end] den Verbrauch in kWh.
-    end ist exklusiv für die äußere Schleife: der letzte eingeschlossene Tag ist end-1ns.
+    Verbrauch pro überlapptem UTC-Kalendertag; period_start/end liegen im Abfragefenster
+  (wichtig für Grafana-Zeitpicker bei kurzen Bereichen).
     """
-    start_u = _day_start_utc(start)
-    end_u = _day_start_utc(end.astimezone(UTC))
-    if end_u <= start_u:
-        return []
     out: list[tuple[datetime, datetime, float | None]] = []
-    day = start_u
-    while day < end_u:
+    for day in _calendar_days_in_range(start, end):
         nxt = day + timedelta(days=1)
-        window_pts = slice_points_for_window(points, day, nxt - timedelta(microseconds=1))
+        clipped = _clip_period_to_query(day, nxt, start, end)
+        if clipped is None:
+            continue
+        ps, pe = clipped
+        window_pts = slice_points_for_window(points, ps, pe)
         if len(window_pts) < 2:
-            out.append((day, nxt, None))
+            out.append((ps, pe, None))
         else:
-            out.append((day, nxt, consumption_kwh_cumulative(window_pts)))
-        day = nxt
+            out.append((ps, pe, consumption_kwh_cumulative(window_pts)))
     return out
 
 
@@ -262,18 +286,18 @@ def daily_buckets_time_window(
     out: list[tuple[datetime, datetime, float | None]] = []
     for day in _local_dates_in_range(start, end, tz):
         w_start, w_end = local_window_bounds(day, time_from, time_to, tz)
-        if w_end.astimezone(UTC) <= start.astimezone(UTC) or w_start.astimezone(UTC) >= end.astimezone(UTC):
+        clipped = _clip_period_to_query(w_start, w_end, start, end)
+        if clipped is None:
             continue
-        window_pts = slice_points_for_window(points, w_start, w_end)
+        ps, pe = clipped
+        window_pts = slice_points_for_window(points, ps, pe)
         if len(window_pts) < 2:
             val = None
         elif use_apparent_va:
             val = energy_kwh_from_apparent_va(window_pts)
         else:
             val = consumption_kwh_cumulative(window_pts)
-        period_start = datetime.combine(day, time.min, tzinfo=tz).astimezone(UTC)
-        period_end = period_start + timedelta(days=1)
-        out.append((period_start, period_end, val))
+        out.append((ps, pe, val))
     return out
 
 

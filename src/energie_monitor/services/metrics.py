@@ -246,7 +246,26 @@ class MetricService:
             return CurrentValueResponse(metric_id=metric_id, timestamp=now, value=v, unit="kWh")
         return CurrentValueResponse(metric_id=metric_id, timestamp=now, value=None, unit="kWh")
 
-    async def timeseries(self, metric_id: MetricId, start: datetime, end: datetime) -> TimeSeriesResponse:
+    @staticmethod
+    def _downsample_points(
+        points: list[tuple[datetime, float]], max_points: int
+    ) -> list[tuple[datetime, float]]:
+        if len(points) <= max_points:
+            return points
+        step = max(len(points) // max_points, 1)
+        sampled = [points[i] for i in range(0, len(points), step)]
+        if sampled[-1][0] != points[-1][0]:
+            sampled.append(points[-1])
+        return sampled
+
+    async def timeseries(
+        self,
+        metric_id: MetricId,
+        start: datetime,
+        end: datetime,
+        *,
+        max_points: int = 800,
+    ) -> TimeSeriesResponse:
         if metric_id == MetricId.haus_ohne_eauto:
             daily = await self.daily(metric_id, start, end)
             points = [
@@ -256,6 +275,7 @@ class MetricService:
             ]
             return TimeSeriesResponse(metric_id=metric_id, unit="kWh", points=points)
         pts = await self._points(metric_id, start, end)
+        pts = self._downsample_points(pts, max_points)
         unit = "kWh"
         series = pts
         if metric_id == MetricId.eauto and self._eauto_apparent_va():
