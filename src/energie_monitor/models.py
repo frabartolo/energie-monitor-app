@@ -108,6 +108,8 @@ class PvSolarYieldRow(BaseModel):
     month: int
     month_label: str
     day: int | None = None
+    date: str | None = Field(default=None, description="Lokales Datum (YYYY-MM-DD)")
+    weekday_label: str | None = Field(default=None, description="Wochentag (Mo–So)")
     value_kwh: float | None
 
 

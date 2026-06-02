@@ -130,6 +130,7 @@ def load_profile_buckets(
     bucket: timedelta,
     *,
     use_apparent_va: bool,
+    use_power_kw: bool = False,
 ) -> list[tuple[datetime, float | None, float | None]]:
     """
     Lastgang: (Bucket-Start UTC, mittlere Leistung kW/kVA, Energie im Bucket kWh).
@@ -147,6 +148,8 @@ def load_profile_buckets(
             energy = None
         elif use_apparent_va:
             energy = energy_kwh_from_apparent_va(window_pts)
+        elif use_power_kw:
+            energy = energy_kwh_from_power_kw(window_pts)
         else:
             energy = consumption_kwh_cumulative(window_pts)
         hours = (nxt - cur).total_seconds() / 3600.0
@@ -154,6 +157,22 @@ def load_profile_buckets(
         out.append((cur, power, energy))
         cur = nxt
     return out
+
+
+def energy_kwh_from_power_kw(points: list[tuple[datetime, float]]) -> float | None:
+    """Trapezintegration einer kW-Leistungszeitreihe → kWh."""
+    if len(points) < 2:
+        return None
+    total_kwh = 0.0
+    for i in range(1, len(points)):
+        t1, p1 = points[i - 1]
+        t2, p2 = points[i]
+        dt_h = (t2.astimezone(UTC) - t1.astimezone(UTC)).total_seconds() / 3600.0
+        if dt_h <= 0:
+            continue
+        avg_kw = max((p1 + p2) / 2.0, 0.0)
+        total_kwh += avg_kw * dt_h
+    return total_kwh
 
 
 def energy_kwh_from_apparent_va(points: list[tuple[datetime, float]]) -> float | None:
@@ -192,6 +211,26 @@ def daily_buckets_from_apparent_va(
             out.append((ps, pe, None))
         else:
             out.append((ps, pe, energy_kwh_from_apparent_va(window_pts)))
+    return out
+
+
+def daily_buckets_from_power_kw(
+    points: list[tuple[datetime, float]],
+    start: datetime,
+    end: datetime,
+) -> list[tuple[datetime, datetime, float | None]]:
+    out: list[tuple[datetime, datetime, float | None]] = []
+    for day in _calendar_days_in_range(start, end):
+        nxt = day + timedelta(days=1)
+        clipped = _clip_period_to_query(day, nxt, start, end)
+        if clipped is None:
+            continue
+        ps, pe = clipped
+        window_pts = slice_points_for_window(points, ps, pe)
+        if len(window_pts) < 2:
+            out.append((ps, pe, None))
+        else:
+            out.append((ps, pe, energy_kwh_from_power_kw(window_pts)))
     return out
 
 

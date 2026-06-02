@@ -9,8 +9,10 @@ from energie_monitor.aggregation import (
     consumption_kwh_cumulative,
     daily_buckets_from_apparent_va,
     daily_buckets_from_cumulative,
+    daily_buckets_from_power_kw,
     daily_buckets_time_window,
     energy_kwh_from_apparent_va,
+    energy_kwh_from_power_kw,
     hourly_profile_mean_daily_kwh,
     interval_label,
     load_profile_buckets,
@@ -67,11 +69,16 @@ class MetricService:
     def _eauto_apparent_va(self) -> bool:
         return self.settings.eauto_measurement == "apparent_power_va"
 
+    def _pv_is_power(self) -> bool:
+        return self.settings.pv_measurement == "instantaneous_power_kw"
+
     def _daily_buckets_raw(
         self, metric_id: MetricId, pts: list[tuple[datetime, float]], start: datetime, end: datetime
     ) -> list[tuple[datetime, datetime, float | None]]:
         if metric_id == MetricId.eauto and self._eauto_apparent_va():
             return daily_buckets_from_apparent_va(pts, start, end)
+        if metric_id == MetricId.pv and self._pv_is_power():
+            return daily_buckets_from_power_kw(pts, start, end)
         return daily_buckets_from_cumulative(pts, start, end)
 
     def _window_energy_kwh(
@@ -81,6 +88,8 @@ class MetricService:
             return None
         if metric_id == MetricId.eauto and self._eauto_apparent_va():
             return energy_kwh_from_apparent_va(window_pts)
+        if metric_id == MetricId.pv and self._pv_is_power():
+            return energy_kwh_from_power_kw(window_pts)
         return consumption_kwh_cumulative(window_pts)
 
     def _resolve_tz(self, timezone: str | None) -> ZoneInfo:
@@ -92,6 +101,9 @@ class MetricService:
 
     def _use_apparent_for(self, metric_id: MetricId) -> bool:
         return metric_id == MetricId.eauto and self._eauto_apparent_va()
+
+    def _use_power_for(self, metric_id: MetricId) -> bool:
+        return metric_id == MetricId.pv and self._pv_is_power()
 
     async def _points_padded(self, metric_id: MetricId, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
         pad = timedelta(days=2)
@@ -109,8 +121,8 @@ class MetricService:
             MetricCatalogEntry(
                 id=MetricId.pv,
                 label="PV-Erzeugung",
-                unit="kWh",
-                measurement=MeasurementKind.cumulative_energy_kwh,
+                unit="kW" if self._pv_is_power() else "kWh",
+                measurement=MeasurementKind.instantaneous_power_kw if self._pv_is_power() else MeasurementKind.cumulative_energy_kwh,
                 source="Volkszähler (Middleware)",
             ),
             MetricCatalogEntry(
@@ -221,6 +233,8 @@ class MetricService:
         if points:
             ts, val = points[-1]
             unit = "kWh"
+            if metric_id == MetricId.pv and self._pv_is_power():
+                unit = "kW"
             if metric_id == MetricId.eauto and self._eauto_apparent_va():
                 val = val / 1000.0 if val is not None else None
                 unit = "kVA"
@@ -232,6 +246,8 @@ class MetricService:
             raw = ha.ha_state_to_float(st)
             unit = "kWh"
             val = raw
+            if metric_id == MetricId.pv and self._pv_is_power():
+                unit = "kW"
             if metric_id == MetricId.eauto and self._eauto_apparent_va():
                 val = raw / 1000.0 if raw is not None else None
                 unit = "kVA"
@@ -278,6 +294,8 @@ class MetricService:
         pts = self._downsample_points(pts, max_points)
         unit = "kWh"
         series = pts
+        if metric_id == MetricId.pv and self._pv_is_power():
+            unit = "kW"
         if metric_id == MetricId.eauto and self._eauto_apparent_va():
             unit = "kVA"
             series = [(a, b / 1000.0) for a, b in pts]
@@ -395,9 +413,17 @@ class MetricService:
 
         pts = await self._points_padded(metric_id, start, end)
         apparent = self._use_apparent_for(metric_id)
+        power_series = self._use_power_for(metric_id)
         if apparent:
             unit = "kVA"
-        raw = load_profile_buckets(pts, start, end, bucket, use_apparent_va=apparent)
+        raw = load_profile_buckets(
+            pts,
+            start,
+            end,
+            bucket,
+            use_apparent_va=apparent,
+            use_power_kw=power_series,
+        )
         points = [
             LoadProfilePoint(timestamp=ts, power_kw=p, energy_kwh=e) for ts, p, e in raw
         ]

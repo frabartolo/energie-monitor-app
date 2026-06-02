@@ -12,7 +12,9 @@ from energie_monitor.sources import volkszaehler as vz
 
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    monkeypatch.setenv("PV_MEASUREMENT", "cumulative_energy_kwh")
     settings = Settings(
+        _env_file=None,
         volkszaehler_base_url="http://volkszaehler.local:8080",
         volkszaehler_uuid_haus="uuid-haus",
         volkszaehler_uuid_pv="uuid-pv",

@@ -31,6 +31,11 @@ class Settings(BaseSettings):
         description="Einheit der absoluten Zählerstände aus Volkszähler; API normalisiert nach kWh",
         validation_alias=AliasChoices("VOLKSZAEHLER_RAW_UNIT", "VOLKSZAEHLER_VALUE_UNIT"),
     )
+    pv_measurement: Literal["instantaneous_power_kw", "cumulative_energy_kwh"] = Field(
+        default="instantaneous_power_kw",
+        description="PV-Kanal in Volkszähler: instantaneous_power_kw (kW-Zeitreihe) oder cumulative_energy_kwh (kWh-Zählerstand).",
+        validation_alias=AliasChoices("PV_MEASUREMENT", "VOLKSZAEHLER_PV_MEASUREMENT"),
+    )
 
     heat_pump_api_base_url: str | None = Field(
         default=None,

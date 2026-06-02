@@ -22,6 +22,8 @@ MONTH_LABELS_DE = (
     "Dezember",
 )
 
+WEEKDAY_LABELS_DE = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+
 
 def _month_label(month: int) -> str:
     if 1 <= month <= 12:
@@ -52,9 +54,16 @@ def _week_bounds_in_month(year: int, month: int, week: int, tz: ZoneInfo) -> tup
         raise ValueError("week muss >= 1 sein.")
     first = datetime(year, month, 1, tzinfo=tz)
     dim = _days_in_month(year, month)
-    start_local = first + timedelta(days=(week - 1) * 7)
-    end_local = min(first + timedelta(days=week * 7), first + timedelta(days=dim))
-    if start_local >= end_local:
+    month_end = first + timedelta(days=dim)
+
+    # Kalenderwoche innerhalb des Monats (Mo–So):
+    # week=1 ist die Woche, die den 1. des Monats enthält (Mo–So).
+    first_week_monday = first - timedelta(days=first.weekday())  # weekday(): Mo=0..So=6
+    start_local = first_week_monday + timedelta(days=(week - 1) * 7)
+    end_local = start_local + timedelta(days=7)
+
+    # Clip auf Monatsbereich (aber die X-Achse bleibt Mo–So, fehlende Tage werden leer)
+    if start_local >= month_end or end_local <= first:
         raise ValueError(f"Woche {week} liegt außerhalb des Monats {month}/{year}.")
     return start_local.astimezone(UTC), end_local.astimezone(UTC)
 
@@ -172,6 +181,8 @@ class PvSolarService:
                 month=month,
                 month_label=_month_label(month),
                 day=d,
+                date=f"{year:04d}-{month:02d}-{d:02d}",
+                weekday_label=WEEKDAY_LABELS_DE[datetime(year, month, d, tzinfo=tz).weekday()],
                 value_kwh=by_day.get(d),
             )
             for d in range(1, dim + 1)
@@ -181,18 +192,29 @@ class PvSolarService:
     async def daily_week(self, year: int, month: int, week: int, tz: ZoneInfo) -> PvSolarYieldResponse:
         start, end = _week_bounds_in_month(year, month, week, tz)
         daily = await self.metrics.daily(MetricId.pv, start, end)
-        rows: list[PvSolarYieldRow] = []
+
+        # Auf lokale Kalendertage normalisieren (verhindert Doppelungen an UTC-Grenzen)
+        by_date: dict[str, float] = defaultdict(float)
         for b in daily.buckets:
             if b.value_kwh is None:
                 continue
-            local = b.period_start.astimezone(tz)
+            local_date = b.period_start.astimezone(tz).date().isoformat()
+            by_date[local_date] += b.value_kwh
+
+        # Immer Mo–So ausgeben
+        start_local = start.astimezone(tz).date()
+        rows: list[PvSolarYieldRow] = []
+        for i, wd in enumerate(WEEKDAY_LABELS_DE):
+            d = start_local + timedelta(days=i)
             rows.append(
                 PvSolarYieldRow(
-                    year=local.year,
-                    month=local.month,
-                    month_label=_month_label(local.month),
-                    day=local.day,
-                    value_kwh=b.value_kwh,
+                    year=d.year,
+                    month=d.month,
+                    month_label=_month_label(d.month),
+                    day=d.day,
+                    date=d.isoformat(),
+                    weekday_label=wd,
+                    value_kwh=by_date.get(d.isoformat()),
                 )
             )
         return PvSolarYieldResponse(
