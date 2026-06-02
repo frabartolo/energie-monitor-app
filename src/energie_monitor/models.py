@@ -101,3 +101,22 @@ class LoadProfileResponse(BaseModel):
     start: datetime
     end: datetime
     points: list[LoadProfilePoint]
+
+
+class PvSolarYieldRow(BaseModel):
+    year: int
+    month: int
+    month_label: str
+    day: int | None = None
+    value_kwh: float | None
+
+
+class PvSolarYieldResponse(BaseModel):
+    unit: str = Field(default="kWh")
+    timezone: str
+    start_year: int | None = None
+    end_year: int | None = None
+    year: int | None = None
+    month: int | None = None
+    week: int | None = None
+    rows: list[PvSolarYieldRow]

@@ -7,6 +7,7 @@ from typing import Annotated
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
+from zoneinfo import ZoneInfo
 
 from energie_monitor import __version__
 from energie_monitor.config import Settings, get_settings
@@ -19,10 +20,12 @@ from energie_monitor.models import (
     MetricCatalogEntry,
     MetricId,
     MonthlyAggregateResponse,
+    PvSolarYieldResponse,
     TimeSeriesResponse,
     YearlyAggregateResponse,
 )
 from energie_monitor.services.metrics import MetricService
+from energie_monitor.services.pv_solar import PvSolarService
 
 
 @asynccontextmanager
@@ -45,6 +48,10 @@ def metric_service(
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> MetricService:
     return MetricService(settings, client)
+
+
+def pv_service(svc: Annotated[MetricService, Depends(metric_service)]) -> PvSolarService:
+    return PvSolarService(svc)
 
 
 def parse_metric_id(metric_id: str = Path(..., description="Kennzahl-ID, z. B. pv, haus_gesamt")) -> MetricId:
@@ -229,3 +236,91 @@ async def metric_window_total(
         raise HTTPException(status_code=400, detail="end muss nach start liegen.")
     v = await svc.window_consumption_kwh(metric_id, start, end)
     return {"metric_id": metric_id.value, "start": start, "end": end, "value_kwh": v, "unit": "kWh"}
+
+
+@app.get("/api/v1/pv/years", response_model=list[int])
+async def pv_years(
+    pv: Annotated[PvSolarService, Depends(pv_service)],
+    svc: Annotated[MetricService, Depends(metric_service)],
+    timezone: str | None = Query(None, description="IANA-Zeitzone, Standard aus ENERGY_TIMEZONE"),
+):
+    try:
+        tz = svc._resolve_tz(timezone)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return await pv.available_years(tz)
+
+
+@app.get("/api/v1/pv/yield/monthly-wide", response_model=list[dict])
+async def pv_monthly_wide(
+    pv: Annotated[PvSolarService, Depends(pv_service)],
+    svc: Annotated[MetricService, Depends(metric_service)],
+    start_year: int = Query(..., ge=2000, le=2100),
+    end_year: int = Query(..., ge=2000, le=2100),
+    timezone: str | None = Query(None),
+):
+    try:
+        tz = svc._resolve_tz(timezone)
+        return await pv.monthly_matrix_wide(start_year, end_year, tz)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/pv/yield/monthly-matrix", response_model=PvSolarYieldResponse)
+async def pv_monthly_matrix(
+    pv: Annotated[PvSolarService, Depends(pv_service)],
+    svc: Annotated[MetricService, Depends(metric_service)],
+    start_year: int = Query(..., ge=2000, le=2100),
+    end_year: int = Query(..., ge=2000, le=2100),
+    timezone: str | None = Query(None),
+):
+    try:
+        tz = svc._resolve_tz(timezone)
+        return await pv.monthly_matrix(start_year, end_year, tz)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/pv/yield/year", response_model=PvSolarYieldResponse)
+async def pv_year_monthly(
+    pv: Annotated[PvSolarService, Depends(pv_service)],
+    svc: Annotated[MetricService, Depends(metric_service)],
+    year: int = Query(..., ge=2000, le=2100),
+    timezone: str | None = Query(None),
+):
+    try:
+        tz = svc._resolve_tz(timezone)
+        return await pv.monthly_year(year, tz)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/pv/yield/month", response_model=PvSolarYieldResponse)
+async def pv_month_daily(
+    pv: Annotated[PvSolarService, Depends(pv_service)],
+    svc: Annotated[MetricService, Depends(metric_service)],
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    timezone: str | None = Query(None),
+):
+    try:
+        tz = svc._resolve_tz(timezone)
+        return await pv.daily_month(year, month, tz)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/v1/pv/yield/week", response_model=PvSolarYieldResponse)
+async def pv_week_daily(
+    pv: Annotated[PvSolarService, Depends(pv_service)],
+    svc: Annotated[MetricService, Depends(metric_service)],
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    week: int = Query(..., ge=1, le=6),
+    timezone: str | None = Query(None),
+):
+    try:
+        tz = svc._resolve_tz(timezone)
+        return await pv.daily_week(year, month, week, tz)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
