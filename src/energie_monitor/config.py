@@ -82,6 +82,24 @@ class Settings(BaseSettings):
 
     request_timeout_seconds: float = 60.0
 
+    pv_history_enabled: bool = Field(
+        default=True,
+        description="Excel/LibreOffice-Referenzwerte in PV-Auswertungen einbeziehen (bis pv_history_through_year)",
+        validation_alias=AliasChoices("PV_HISTORY_ENABLED", "PV_SOLAR_HISTORY_ENABLED"),
+    )
+    pv_history_through_year: int = Field(
+        default=2024,
+        ge=2000,
+        le=2100,
+        description="Letztes Jahr, für das Referenz-Excel Vorrang vor Volkszähler hat; danach nur Live",
+        validation_alias=AliasChoices("PV_HISTORY_THROUGH_YEAR", "PV_HISTORY_END_YEAR"),
+    )
+    pv_history_path: str | None = Field(
+        default=None,
+        description="Optional: JSON mit Monatswerten (Format wie pv_solar_history_2012_2025.json)",
+        validation_alias=AliasChoices("PV_HISTORY_PATH", "PV_SOLAR_HISTORY_PATH"),
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:

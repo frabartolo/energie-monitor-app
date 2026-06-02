@@ -4,8 +4,9 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from energie_monitor.models import AggregateBucket, MetricId, PvSolarYieldResponse, PvSolarYieldRow
+from energie_monitor.models import MetricId, PvSolarYieldResponse, PvSolarYieldRow
 from energie_monitor.services.metrics import MetricService
+from energie_monitor.services.pv_solar_history import get_pv_history_monthly, merge_monthly
 
 MONTH_LABELS_DE = (
     "Januar",
@@ -56,9 +57,7 @@ def _week_bounds_in_month(year: int, month: int, week: int, tz: ZoneInfo) -> tup
     dim = _days_in_month(year, month)
     month_end = first + timedelta(days=dim)
 
-    # Woche = Montag..Sonntag. Zuordnung zum Monat = Monat des Montags.
-    # week=1 ist der erste Montag, der im Monat liegt; week=2 der nächste Montag, usw.
-    first_monday = first + timedelta(days=(7 - first.weekday()) % 7)  # weekday(): Mo=0..So=6
+    first_monday = first + timedelta(days=(7 - first.weekday()) % 7)
     start_local = first_monday + timedelta(days=(week - 1) * 7)
     end_local = start_local + timedelta(days=7)
 
@@ -71,6 +70,37 @@ class PvSolarService:
     def __init__(self, metrics: MetricService):
         self.metrics = metrics
 
+    def _history_monthly(self) -> dict[tuple[int, int], float]:
+        s = self.metrics.settings
+        return get_pv_history_monthly(path=s.pv_history_path, enabled=s.pv_history_enabled)
+
+    async def _live_by_month(
+        self, start_year: int, end_year: int, tz: ZoneInfo
+    ) -> dict[tuple[int, int], float]:
+        start = datetime(start_year, 1, 1, tzinfo=tz).astimezone(UTC)
+        end = datetime(end_year + 1, 1, 1, tzinfo=tz).astimezone(UTC)
+        daily = await self.metrics.daily(MetricId.pv, start, end)
+        by_month: dict[tuple[int, int], float] = defaultdict(float)
+        for b in daily.buckets:
+            if b.value_kwh is None:
+                continue
+            local = b.period_start.astimezone(tz)
+            by_month[(local.year, local.month)] += b.value_kwh
+        return dict(by_month)
+
+    async def _by_month_merged(
+        self, start_year: int, end_year: int, tz: ZoneInfo
+    ) -> dict[tuple[int, int], float | None]:
+        live = await self._live_by_month(start_year, end_year, tz)
+        history = self._history_monthly()
+        return merge_monthly(
+            live,
+            history,
+            start_year=start_year,
+            end_year=end_year,
+            history_through_year=self.metrics.settings.pv_history_through_year,
+        )
+
     async def available_years(self, tz: ZoneInfo) -> list[int]:
         now = datetime.now(tz=UTC)
         start = datetime(now.year - 20, 1, 1, tzinfo=UTC)
@@ -80,27 +110,16 @@ class PvSolarService:
             for b in daily.buckets
             if b.value_kwh is not None and b.value_kwh > 0
         }
+        for year, _month in self._history_monthly():
+            years.add(year)
         if not years:
             years = {now.astimezone(tz).year}
         return sorted(years)
 
     async def monthly_matrix_wide(self, start_year: int, end_year: int, tz: ZoneInfo) -> list[dict]:
-        """
-        Wide-Format für Grafana Bar-Charts:
-        Eine Zeile pro Monat, Spalten pro Jahr (z. B. "y2024": 123.4).
-        """
         if end_year < start_year:
             raise ValueError("end_year muss >= start_year sein.")
-        start = datetime(start_year, 1, 1, tzinfo=tz).astimezone(UTC)
-        end = datetime(end_year + 1, 1, 1, tzinfo=tz).astimezone(UTC)
-        daily = await self.metrics.daily(MetricId.pv, start, end)
-        by_month: dict[tuple[int, int], float] = defaultdict(float)
-        for b in daily.buckets:
-            if b.value_kwh is None:
-                continue
-            local = b.period_start.astimezone(tz)
-            by_month[(local.year, local.month)] += b.value_kwh
-
+        by_month = await self._by_month_merged(start_year, end_year, tz)
         rows: list[dict] = []
         for month in range(1, 13):
             row: dict[str, object] = {"month": month, "month_label": _month_label(month)}
@@ -110,21 +129,18 @@ class PvSolarService:
         return rows
 
     async def yearly_totals(self, start_year: int, end_year: int, tz: ZoneInfo) -> list[dict]:
-        """
-        Eine Zeile pro Jahr mit Gesamtertrag (kWh) – für Jahresvergleichs-Balkendiagramm.
-        """
         if end_year < start_year:
             raise ValueError("end_year muss >= start_year sein.")
-        start = datetime(start_year, 1, 1, tzinfo=tz).astimezone(UTC)
-        end = datetime(end_year + 1, 1, 1, tzinfo=tz).astimezone(UTC)
-        daily = await self.metrics.daily(MetricId.pv, start, end)
+        by_month = await self._by_month_merged(start_year, end_year, tz)
         by_year: dict[int, float] = defaultdict(float)
-        for b in daily.buckets:
-            if b.value_kwh is None:
-                continue
-            by_year[b.period_start.astimezone(tz).year] += b.value_kwh
+        for (year, _month), val in by_month.items():
+            if val is not None:
+                by_year[year] += val
         return [
-            {"year": year, "value_kwh": by_year.get(year)}
+            {
+                "year": year,
+                "value_kwh": by_year[year] if by_year.get(year) else None,
+            }
             for year in range(start_year, end_year + 1)
         ]
 
@@ -133,15 +149,7 @@ class PvSolarService:
     ) -> PvSolarYieldResponse:
         if end_year < start_year:
             raise ValueError("end_year muss >= start_year sein.")
-        start = datetime(start_year, 1, 1, tzinfo=tz).astimezone(UTC)
-        end = datetime(end_year + 1, 1, 1, tzinfo=tz).astimezone(UTC)
-        daily = await self.metrics.daily(MetricId.pv, start, end)
-        by_month: dict[tuple[int, int], float] = defaultdict(float)
-        for b in daily.buckets:
-            if b.value_kwh is None:
-                continue
-            local = b.period_start.astimezone(tz)
-            by_month[(local.year, local.month)] += b.value_kwh
+        by_month = await self._by_month_merged(start_year, end_year, tz)
         rows: list[PvSolarYieldRow] = []
         for year in range(start_year, end_year + 1):
             for month in range(1, 13):
@@ -162,21 +170,14 @@ class PvSolarService:
         )
 
     async def monthly_year(self, year: int, tz: ZoneInfo) -> PvSolarYieldResponse:
-        start = datetime(year, 1, 1, tzinfo=tz).astimezone(UTC)
-        end = datetime(year + 1, 1, 1, tzinfo=tz).astimezone(UTC)
-        daily = await self.metrics.daily(MetricId.pv, start, end)
-        by_month: dict[int, float] = defaultdict(float)
-        for b in daily.buckets:
-            if b.value_kwh is None:
-                continue
-            by_month[b.period_start.astimezone(tz).month] += b.value_kwh
+        by_month = await self._by_month_merged(year, year, tz)
         rows = [
             PvSolarYieldRow(
                 year=year,
                 month=m,
                 month_label=_month_label(m),
                 day=None,
-                value_kwh=by_month.get(m),
+                value_kwh=by_month.get((year, m)),
             )
             for m in range(1, 13)
         ]
@@ -192,7 +193,14 @@ class PvSolarService:
             if b.value_kwh is None:
                 continue
             by_day[b.period_start.astimezone(tz).day] += b.value_kwh
+
+        month_kwh = (await self._by_month_merged(year, year, tz)).get((year, month))
+        has_live = any(v is not None and v > 0 for v in by_day.values())
         dim = _days_in_month(year, month)
+        if not has_live and month_kwh is not None:
+            per_day = month_kwh / dim
+            by_day = {d: per_day for d in range(1, dim + 1)}
+
         rows = [
             PvSolarYieldRow(
                 year=year,
@@ -211,7 +219,6 @@ class PvSolarService:
         start, end = _week_bounds_in_month(year, month, week, tz)
         daily = await self.metrics.daily(MetricId.pv, start, end)
 
-        # Auf lokale Kalendertage normalisieren (verhindert Doppelungen an UTC-Grenzen)
         by_date: dict[str, float] = defaultdict(float)
         for b in daily.buckets:
             if b.value_kwh is None:
@@ -219,8 +226,16 @@ class PvSolarService:
             local_date = b.period_start.astimezone(tz).date().isoformat()
             by_date[local_date] += b.value_kwh
 
-        # Immer Mo–So ausgeben
         start_local = start.astimezone(tz).date()
+        if not any(by_date.values()):
+            merged = await self._by_month_merged(year, year, tz)
+            for i in range(7):
+                d = start_local + timedelta(days=i)
+                month_kwh = merged.get((d.year, d.month))
+                if month_kwh is not None:
+                    dim = _days_in_month(d.year, d.month)
+                    by_date[d.isoformat()] = month_kwh / dim
+
         rows: list[PvSolarYieldRow] = []
         for i, wd in enumerate(WEEKDAY_LABELS_DE):
             d = start_local + timedelta(days=i)

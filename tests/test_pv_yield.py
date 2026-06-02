@@ -22,7 +22,9 @@ def pv_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     app.dependency_overrides[get_settings] = lambda: settings
 
-    async def fake_vz_get_tuples(_client, _settings, uuid: str, start: datetime, end: datetime):
+    async def fake_vz_get_tuples(
+        _client, _settings, uuid: str, start: datetime, end: datetime, **_kwargs
+    ):
         assert uuid == "uuid-pv"
         start_u = start.astimezone(UTC)
         end_u = end.astimezone(UTC)
