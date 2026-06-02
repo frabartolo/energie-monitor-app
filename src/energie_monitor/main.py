@@ -251,6 +251,21 @@ async def pv_years(
     return await pv.available_years(tz)
 
 
+@app.get("/api/v1/pv/yield/yearly", response_model=list[dict])
+async def pv_yearly_totals(
+    pv: Annotated[PvSolarService, Depends(pv_service)],
+    svc: Annotated[MetricService, Depends(metric_service)],
+    start_year: int = Query(..., ge=2000, le=2100),
+    end_year: int = Query(..., ge=2000, le=2100),
+    timezone: str | None = Query(None),
+):
+    try:
+        tz = svc._resolve_tz(timezone)
+        return await pv.yearly_totals(start_year, end_year, tz)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.get("/api/v1/pv/yield/monthly-wide", response_model=list[dict])
 async def pv_monthly_wide(
     pv: Annotated[PvSolarService, Depends(pv_service)],

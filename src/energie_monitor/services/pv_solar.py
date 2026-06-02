@@ -109,6 +109,25 @@ class PvSolarService:
             rows.append(row)
         return rows
 
+    async def yearly_totals(self, start_year: int, end_year: int, tz: ZoneInfo) -> list[dict]:
+        """
+        Eine Zeile pro Jahr mit Gesamtertrag (kWh) – für Jahresvergleichs-Balkendiagramm.
+        """
+        if end_year < start_year:
+            raise ValueError("end_year muss >= start_year sein.")
+        start = datetime(start_year, 1, 1, tzinfo=tz).astimezone(UTC)
+        end = datetime(end_year + 1, 1, 1, tzinfo=tz).astimezone(UTC)
+        daily = await self.metrics.daily(MetricId.pv, start, end)
+        by_year: dict[int, float] = defaultdict(float)
+        for b in daily.buckets:
+            if b.value_kwh is None:
+                continue
+            by_year[b.period_start.astimezone(tz).year] += b.value_kwh
+        return [
+            {"year": year, "value_kwh": by_year.get(year)}
+            for year in range(start_year, end_year + 1)
+        ]
+
     async def monthly_matrix(
         self, start_year: int, end_year: int, tz: ZoneInfo
     ) -> PvSolarYieldResponse:

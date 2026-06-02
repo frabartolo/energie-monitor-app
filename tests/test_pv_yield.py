@@ -59,6 +59,17 @@ def test_pv_years(pv_client: TestClient):
     assert 2025 in years
 
 
+def test_pv_yearly_totals(pv_client: TestClient):
+    r = pv_client.get("/api/v1/pv/yield/yearly?start_year=2024&end_year=2025&timezone=UTC")
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 2
+    assert rows[0]["year"] == 2024
+    assert rows[1]["year"] == 2025
+    assert rows[0]["value_kwh"] is not None
+    assert rows[0]["value_kwh"] > 0
+
+
 def test_pv_monthly_wide(pv_client: TestClient):
     r = pv_client.get("/api/v1/pv/yield/monthly-wide?start_year=2024&end_year=2025&timezone=UTC")
     assert r.status_code == 200
