@@ -56,14 +56,13 @@ def _week_bounds_in_month(year: int, month: int, week: int, tz: ZoneInfo) -> tup
     dim = _days_in_month(year, month)
     month_end = first + timedelta(days=dim)
 
-    # Kalenderwoche innerhalb des Monats (Mo–So):
-    # week=1 ist die Woche, die den 1. des Monats enthält (Mo–So).
-    first_week_monday = first - timedelta(days=first.weekday())  # weekday(): Mo=0..So=6
-    start_local = first_week_monday + timedelta(days=(week - 1) * 7)
+    # Woche = Montag..Sonntag. Zuordnung zum Monat = Monat des Montags.
+    # week=1 ist der erste Montag, der im Monat liegt; week=2 der nächste Montag, usw.
+    first_monday = first + timedelta(days=(7 - first.weekday()) % 7)  # weekday(): Mo=0..So=6
+    start_local = first_monday + timedelta(days=(week - 1) * 7)
     end_local = start_local + timedelta(days=7)
 
-    # Clip auf Monatsbereich (aber die X-Achse bleibt Mo–So, fehlende Tage werden leer)
-    if start_local >= month_end or end_local <= first:
+    if start_local.month != month or start_local >= month_end:
         raise ValueError(f"Woche {week} liegt außerhalb des Monats {month}/{year}.")
     return start_local.astimezone(UTC), end_local.astimezone(UTC)
 
