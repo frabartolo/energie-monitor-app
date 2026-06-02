@@ -55,12 +55,23 @@ async def _vz_fetch_chunk(
     uuid: str,
     start: datetime,
     end: datetime,
+    *,
+    group: str | None = None,
+    tuples: int | None = None,
+    options: str | None = None,
 ) -> list[tuple[datetime, float]]:
     base = settings.volkszaehler_base_url.rstrip("/")
     url = f"{base}/data/{uuid}.json"
+    params: dict[str, object] = {"from": _ms(start), "to": _ms(end)}
+    if group:
+        params["group"] = group
+    if tuples is not None:
+        params["tuples"] = int(tuples)
+    if options:
+        params["options"] = options
     r = await client.get(
         url,
-        params={"from": _ms(start), "to": _ms(end)},
+        params=params,
         timeout=settings.request_timeout_seconds,
     )
     r.raise_for_status()
@@ -98,6 +109,9 @@ async def vz_get_tuples(
     end: datetime,
     *,
     chunk_days: int = DEFAULT_CHUNK_DAYS,
+    group: str | None = None,
+    tuples: int | None = None,
+    options: str | None = None,
 ) -> list[tuple[datetime, float]]:
     if not settings.volkszaehler_base_url:
         raise RuntimeError("Volkszähler ist nicht konfiguriert (VOLKSZAEHLER_BASE_URL).")
@@ -108,7 +122,16 @@ async def vz_get_tuples(
 
     if end_u - start_u <= timedelta(days=chunk_days):
         try:
-            return await _vz_fetch_chunk(client, settings, uuid, start_u, end_u)
+            return await _vz_fetch_chunk(
+                client,
+                settings,
+                uuid,
+                start_u,
+                end_u,
+                group=group,
+                tuples=tuples,
+                options=options,
+            )
         except httpx.HTTPError:
             return []
 
@@ -118,7 +141,16 @@ async def vz_get_tuples(
     async def load_one(chunk_start: datetime, chunk_end: datetime) -> list[tuple[datetime, float]]:
         async with sem:
             try:
-                return await _vz_fetch_chunk(client, settings, uuid, chunk_start, chunk_end)
+                return await _vz_fetch_chunk(
+                    client,
+                    settings,
+                    uuid,
+                    chunk_start,
+                    chunk_end,
+                    group=group,
+                    tuples=tuples,
+                    options=options,
+                )
             except httpx.HTTPError:
                 return []
 

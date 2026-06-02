@@ -258,6 +258,38 @@ def daily_buckets_from_cumulative(
     return out
 
 
+def daily_buckets_from_consumption_points(
+    points: list[tuple[datetime, float]],
+    start: datetime,
+    end: datetime,
+) -> list[tuple[datetime, datetime, float | None]]:
+    """
+    Tageswerte aus Volkszähler-Aggregaten (group=day&options=consumption).
+
+    Volkszähler setzt den Timestamp üblicherweise auf das Ende des Intervalls.
+    Wir ordnen jeden Punkt einem UTC-Kalendertag zu und geben für alle im Bereich
+    überlappten Tage einen Bucket zurück (period_start/end innerhalb des Abfragefensters).
+    """
+    by_day: dict[date, float] = {}
+    for ts, val in points:
+        t = ts.astimezone(UTC)
+        # Falls Volkszähler den Intervall-Ende-Timestamp exakt auf 00:00 des Folgetags setzt,
+        # ordnen wir ihn dem Vortag zu.
+        if t.hour == 0 and t.minute == 0 and t.second == 0 and t.microsecond == 0:
+            t = t - timedelta(microseconds=1)
+        by_day[t.date()] = val
+
+    out: list[tuple[datetime, datetime, float | None]] = []
+    for day in _calendar_days_in_range(start, end):
+        nxt = day + timedelta(days=1)
+        clipped = _clip_period_to_query(day, nxt, start, end)
+        if clipped is None:
+            continue
+        ps, pe = clipped
+        out.append((ps, pe, by_day.get(ps.astimezone(UTC).date())))
+    return out
+
+
 def rollup_daily_to_monthly(
     daily: list[tuple[datetime, datetime, float | None]],
 ) -> list[tuple[datetime, datetime, float | None]]:

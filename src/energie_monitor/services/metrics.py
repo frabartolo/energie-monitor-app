@@ -9,6 +9,7 @@ from energie_monitor.aggregation import (
     consumption_kwh_cumulative,
     daily_buckets_from_apparent_va,
     daily_buckets_from_cumulative,
+    daily_buckets_from_consumption_points,
     daily_buckets_from_power_kw,
     daily_buckets_time_window,
     energy_kwh_from_apparent_va,
@@ -320,6 +321,25 @@ class MetricService:
         ):
             buckets = await self._daily_via_wp_api(start, end)
             return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
+
+        # PV (Leistung in kW) für große Zeiträume: Volkszähler soll direkt Tagesverbrauch aggregieren.
+        # Das verhindert Millionen Rohpunkte und macht /pv/yield/year wieder performant.
+        if metric_id == MetricId.pv and self._pv_is_power():
+            s = self.settings
+            if s.volkszaehler_uuid_pv:
+                pts = await vz.vz_get_tuples(
+                    self.client,
+                    s,
+                    s.volkszaehler_uuid_pv,
+                    start,
+                    end,
+                    group="day",
+                    options="consumption",
+                )
+                raw = daily_buckets_from_consumption_points(pts, start, end)
+                buckets = [AggregateBucket(period_start=a, period_end=b, value_kwh=c) for a, b, c in raw]
+                return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
+
         pts = await self._points(metric_id, start - timedelta(days=1), end + timedelta(days=1))
         raw = self._daily_buckets_raw(metric_id, pts, start, end)
         buckets = [AggregateBucket(period_start=a, period_end=b, value_kwh=c) for a, b, c in raw]
