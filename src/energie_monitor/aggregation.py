@@ -258,18 +258,41 @@ def daily_buckets_from_cumulative(
     return out
 
 
+def consumption_by_local_date(
+    points: list[tuple[datetime, float]],
+    tz: ZoneInfo,
+) -> dict[date, float]:
+    """Volkszähler group=day&consumption → lokales Kalenderdatum (Ortszeit)."""
+    by_local: dict[date, float] = {}
+    for ts, val in points:
+        local = ts.astimezone(tz)
+        d = local.date()
+        if local.hour == 0 and local.minute == 0 and local.second == 0 and local.microsecond == 0:
+            d = (local - timedelta(microseconds=1)).date()
+        by_local[d] = val
+    return by_local
+
+
 def daily_buckets_from_consumption_points(
     points: list[tuple[datetime, float]],
     start: datetime,
     end: datetime,
+    tz: ZoneInfo | None = None,
 ) -> list[tuple[datetime, datetime, float | None]]:
     """
     Tageswerte aus Volkszähler-Aggregaten (group=day&options=consumption).
 
-    Volkszähler setzt den Timestamp üblicherweise auf das Ende des Intervalls.
-    Wir ordnen jeden Punkt einem UTC-Kalendertag zu und geben für alle im Bereich
-    überlappten Tage einen Bucket zurück (period_start/end innerhalb des Abfragefensters).
+    Mit tz: Buckets nach **lokalen** Kalendertagen (period_start = lokale Mitternacht UTC).
+    Ohne tz: legacy UTC-Kalendertage.
     """
+    if tz is not None:
+        by_local = consumption_by_local_date(points, tz)
+        out: list[tuple[datetime, datetime, float | None]] = []
+        for day in _local_dates_in_range(start, end, tz):
+            w_start, w_end = local_window_bounds(day, time(0, 0), time(0, 0), tz)
+            out.append((w_start, w_end, by_local.get(day)))
+        return out
+
     by_day: dict[date, float] = {}
     for ts, val in points:
         t = ts.astimezone(UTC)

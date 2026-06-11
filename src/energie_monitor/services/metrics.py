@@ -336,7 +336,8 @@ class MetricService:
                     group="day",
                     options="consumption",
                 )
-                raw = daily_buckets_from_consumption_points(pts, start, end)
+                tz = self._resolve_tz(None)
+                raw = daily_buckets_from_consumption_points(pts, start, end, tz=tz)
                 buckets = [AggregateBucket(period_start=a, period_end=b, value_kwh=c) for a, b, c in raw]
                 return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
 

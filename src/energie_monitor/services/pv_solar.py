@@ -1,12 +1,19 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from energie_monitor.aggregation import (
+    consumption_by_local_date,
+    energy_kwh_from_power_kw,
+    local_window_bounds,
+    slice_points_for_window,
+)
 from energie_monitor.models import MetricId, PvSolarYieldResponse, PvSolarYieldRow, PvSolarYieldSummary
 from energie_monitor.services.metrics import MetricService
 from energie_monitor.services.pv_solar_history import get_pv_history_monthly, merge_monthly
+from energie_monitor.sources import volkszaehler as vz
 
 MONTH_LABELS_DE = (
     "Januar",
@@ -236,19 +243,58 @@ class PvSolarService:
         if not 1 <= month <= 12:
             raise ValueError("month muss 1–12 sein.")
         start, end = _month_bounds(year, month, tz)
-        daily = await self.metrics.daily(MetricId.pv, start, end)
-        by_day: dict[int, float] = defaultdict(float)
-        for b in daily.buckets:
-            if b.value_kwh is None:
-                continue
-            by_day[b.period_start.astimezone(tz).day] += b.value_kwh
-
-        month_kwh = (await self._by_month_merged(year, year, tz)).get((year, month))
-        has_live = any(v is not None and v > 0 for v in by_day.values())
         dim = _days_in_month(year, month)
-        if not has_live and month_kwh is not None:
-            per_day = month_kwh / dim
-            by_day = {d: per_day for d in range(1, dim + 1)}
+        by_date: dict[str, float | None] = {}
+
+        s = self.metrics.settings
+        if self.metrics._pv_is_power() and s.volkszaehler_uuid_pv:
+            cons_pts = await vz.vz_get_tuples(
+                self.metrics.client,
+                s,
+                s.volkszaehler_uuid_pv,
+                start,
+                end,
+                group="day",
+                options="consumption",
+            )
+            by_local = consumption_by_local_date(cons_pts, tz)
+            missing: list[date] = []
+            for d in range(1, dim + 1):
+                ld = date(year, month, d)
+                iso = ld.isoformat()
+                if ld in by_local:
+                    by_date[iso] = by_local[ld]
+                else:
+                    missing.append(ld)
+            if missing:
+                raw_pts = await vz.vz_get_tuples(
+                    self.metrics.client,
+                    s,
+                    s.volkszaehler_uuid_pv,
+                    start - timedelta(days=1),
+                    end + timedelta(days=1),
+                )
+                for ld in missing:
+                    w_start, w_end = local_window_bounds(ld, time(0, 0), time(0, 0), tz)
+                    window_pts = slice_points_for_window(raw_pts, w_start, w_end)
+                    by_date[ld.isoformat()] = (
+                        energy_kwh_from_power_kw(window_pts) if len(window_pts) >= 2 else None
+                    )
+        else:
+            daily = await self.metrics.daily(MetricId.pv, start, end)
+            for b in daily.buckets:
+                if b.value_kwh is None:
+                    continue
+                local = b.period_start.astimezone(tz)
+                if local.year == year and local.month == month:
+                    iso = local.date().isoformat()
+                    by_date[iso] = (by_date.get(iso) or 0) + b.value_kwh
+            if not any(v is not None and v > 0 for v in by_date.values()):
+                month_kwh = (await self._by_month_merged(year, year, tz)).get((year, month))
+                if month_kwh is not None:
+                    per_day = month_kwh / dim
+                    for d in range(1, dim + 1):
+                        by_date[f"{year:04d}-{month:02d}-{d:02d}"] = per_day
 
         rows = [
             PvSolarYieldRow(
@@ -258,7 +304,7 @@ class PvSolarService:
                 day=d,
                 date=f"{year:04d}-{month:02d}-{d:02d}",
                 weekday_label=WEEKDAY_LABELS_DE[datetime(year, month, d, tzinfo=tz).weekday()],
-                value_kwh=by_day.get(d),
+                value_kwh=by_date.get(f"{year:04d}-{month:02d}-{d:02d}"),
             )
             for d in range(1, dim + 1)
         ]
