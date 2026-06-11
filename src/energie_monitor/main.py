@@ -288,10 +288,11 @@ async def pv_yearly_totals(
     start_year: int = Query(..., ge=2000, le=2100),
     end_year: int = Query(..., ge=2000, le=2100),
     timezone: str | None = Query(None),
+    peak_power_kwp: float | None = Query(None, gt=0),
 ):
     try:
         tz = svc._resolve_tz(timezone)
-        return await pv.yearly_totals(start_year, end_year, tz)
+        return await pv.yearly_totals(start_year, end_year, tz, peak_power_kwp=peak_power_kwp)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

@@ -106,8 +106,8 @@ class Settings(BaseSettings):
     )
 
     pv_peak_power_kwp: float | None = Field(
-        default=None,
-        description="Installierte PV-Nennleistung (kWp) für spez. Ertrag kWh/kWp",
+        default=11.28,
+        description="Installierte PV-Nennleistung (kWp) für spez. Ertrag kWh/kWp; 11280 Wp = 11,28 kWp",
         validation_alias=AliasChoices("PV_PEAK_POWER_KWP", "PV_KWP", "PV_INSTALLED_KWP"),
     )
 
