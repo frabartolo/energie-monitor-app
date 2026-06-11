@@ -120,14 +120,19 @@ class PvSolarService:
     async def _by_month_merged(
         self, start_year: int, end_year: int, tz: ZoneInfo
     ) -> dict[tuple[int, int], float | None]:
-        live = await self._live_by_month(start_year, end_year, tz)
         history = self._history_monthly()
+        history_through = self.metrics.settings.pv_history_through_year
+        # Volkszähler nur für Jahre ohne Excel-Referenz (Performance: nicht 2012–2024 abfragen)
+        live_start = max(start_year, history_through + 1) if history else start_year
+        live: dict[tuple[int, int], float] = {}
+        if live_start <= end_year:
+            live = await self._live_by_month(live_start, end_year, tz)
         return merge_monthly(
             live,
             history,
             start_year=start_year,
             end_year=end_year,
-            history_through_year=self.metrics.settings.pv_history_through_year,
+            history_through_year=history_through,
         )
 
     async def available_years(self, tz: ZoneInfo) -> list[int]:

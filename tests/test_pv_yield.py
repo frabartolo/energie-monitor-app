@@ -73,6 +73,38 @@ def test_pv_yield_summary_kwp_per_kwp(pv_client: TestClient):
     app.dependency_overrides.clear()
 
 
+def test_monthly_wide_uses_history_without_full_live_fetch(monkeypatch: pytest.MonkeyPatch):
+    settings = Settings(
+        volkszaehler_base_url="http://volkszaehler.local:8080",
+        volkszaehler_uuid_pv="uuid-pv",
+        volkszaehler_raw_unit="kWh",
+        energy_timezone="Europe/Berlin",
+        pv_history_enabled=True,
+        pv_history_through_year=2024,
+        request_timeout_seconds=1,
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+
+    live_years: list[int] = []
+
+    async def fake_vz_get_tuples(_client, _settings, uuid: str, start: datetime, end: datetime, **_kwargs):
+        assert uuid == "uuid-pv"
+        live_years.append(start.astimezone(UTC).year)
+        return []
+
+    monkeypatch.setattr(vz, "vz_get_tuples", fake_vz_get_tuples)
+
+    with TestClient(app) as client:
+        r = client.get("/api/v1/pv/yield/monthly-wide?start_year=2012&end_year=2025&timezone=UTC")
+        assert r.status_code == 200
+        rows = r.json()
+        assert rows[0]["y2013"] == pytest.approx(207.51)
+        assert rows[0]["y2025"] is None
+        assert all(y >= 2025 for y in live_years)
+
+    app.dependency_overrides.clear()
+
+
 def test_pv_years(pv_client: TestClient):
     r = pv_client.get("/api/v1/pv/years")
     assert r.status_code == 200
