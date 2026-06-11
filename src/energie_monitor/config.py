@@ -8,7 +8,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        populate_by_name=True,
+    )
 
     app_name: str = "energie-monitor-app"
 
@@ -98,6 +103,12 @@ class Settings(BaseSettings):
         default=None,
         description="Optional: JSON mit Monatswerten (Format wie pv_solar_history_2012_2025.json)",
         validation_alias=AliasChoices("PV_HISTORY_PATH", "PV_SOLAR_HISTORY_PATH"),
+    )
+
+    pv_peak_power_kwp: float | None = Field(
+        default=None,
+        description="Installierte PV-Nennleistung (kWp) für spez. Ertrag kWh/kWp",
+        validation_alias=AliasChoices("PV_PEAK_POWER_KWP", "PV_KWP", "PV_INSTALLED_KWP"),
     )
 
 

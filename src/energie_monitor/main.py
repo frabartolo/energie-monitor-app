@@ -21,6 +21,7 @@ from energie_monitor.models import (
     MetricId,
     MonthlyAggregateResponse,
     PvSolarYieldResponse,
+    PvSolarYieldSummary,
     TimeSeriesResponse,
     YearlyAggregateResponse,
 )
@@ -249,6 +250,35 @@ async def pv_years(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return await pv.available_years(tz)
+
+
+@app.get("/api/v1/pv/yield/summary", response_model=PvSolarYieldSummary)
+async def pv_yield_summary(
+    pv: Annotated[PvSolarService, Depends(pv_service)],
+    svc: Annotated[MetricService, Depends(metric_service)],
+    start_year: int | None = Query(None, ge=2000, le=2100),
+    end_year: int | None = Query(None, ge=2000, le=2100),
+    year: int | None = Query(None, ge=2000, le=2100),
+    month: int | None = Query(None, ge=1, le=12),
+    week: int | None = Query(None, ge=1, le=6),
+    timezone: str | None = Query(None),
+    peak_power_kwp: float | None = Query(
+        None, gt=0, description="Optional kWp-Override; sonst PV_PEAK_POWER_KWP aus .env"
+    ),
+):
+    try:
+        tz = svc._resolve_tz(timezone)
+        return await pv.yield_summary(
+            tz,
+            start_year=start_year,
+            end_year=end_year,
+            year=year,
+            month=month,
+            week=week,
+            peak_power_kwp=peak_power_kwp,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/v1/pv/yield/yearly", response_model=list[dict])

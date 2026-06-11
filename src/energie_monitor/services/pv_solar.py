@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from energie_monitor.models import MetricId, PvSolarYieldResponse, PvSolarYieldRow
+from energie_monitor.models import MetricId, PvSolarYieldResponse, PvSolarYieldRow, PvSolarYieldSummary
 from energie_monitor.services.metrics import MetricService
 from energie_monitor.services.pv_solar_history import get_pv_history_monthly, merge_monthly
 
@@ -24,6 +24,32 @@ MONTH_LABELS_DE = (
 )
 
 WEEKDAY_LABELS_DE = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+
+
+def _sum_row_values(rows: list[PvSolarYieldRow]) -> float | None:
+    vals = [r.value_kwh for r in rows if r.value_kwh is not None]
+    return sum(vals) if vals else None
+
+
+def _resolve_kwp(settings, override: float | None) -> float | None:
+    if override is not None and override > 0:
+        return override
+    kwp = settings.pv_peak_power_kwp
+    return kwp if kwp and kwp > 0 else None
+
+
+def _specific_yield(total: float | None, kwp: float | None) -> float | None:
+    if total is None or kwp is None:
+        return None
+    return total / kwp
+
+
+def _with_summary(response: PvSolarYieldResponse, *, kwp: float | None) -> PvSolarYieldResponse:
+    total = _sum_row_values(response.rows)
+    response.total_kwh = total
+    response.peak_power_kwp = kwp
+    response.specific_yield_kwh_per_kwp = _specific_yield(total, kwp)
+    return response
 
 
 def _month_label(month: int) -> str:
@@ -69,6 +95,9 @@ def _week_bounds_in_month(year: int, month: int, week: int, tz: ZoneInfo) -> tup
 class PvSolarService:
     def __init__(self, metrics: MetricService):
         self.metrics = metrics
+
+    def _kwp(self, override: float | None = None) -> float | None:
+        return _resolve_kwp(self.metrics.settings, override)
 
     def _history_monthly(self) -> dict[tuple[int, int], float]:
         s = self.metrics.settings
@@ -128,9 +157,12 @@ class PvSolarService:
             rows.append(row)
         return rows
 
-    async def yearly_totals(self, start_year: int, end_year: int, tz: ZoneInfo) -> list[dict]:
+    async def yearly_totals(
+        self, start_year: int, end_year: int, tz: ZoneInfo, *, peak_power_kwp: float | None = None
+    ) -> list[dict]:
         if end_year < start_year:
             raise ValueError("end_year muss >= start_year sein.")
+        kwp = self._kwp(peak_power_kwp)
         by_month = await self._by_month_merged(start_year, end_year, tz)
         by_year: dict[int, float] = defaultdict(float)
         for (year, _month), val in by_month.items():
@@ -140,6 +172,8 @@ class PvSolarService:
             {
                 "year": year,
                 "value_kwh": by_year[year] if by_year.get(year) else None,
+                "peak_power_kwp": kwp,
+                "specific_yield_kwh_per_kwp": _specific_yield(by_year.get(year), kwp),
             }
             for year in range(start_year, end_year + 1)
         ]
@@ -162,14 +196,19 @@ class PvSolarService:
                         value_kwh=by_month.get((year, month)),
                     )
                 )
-        return PvSolarYieldResponse(
-            timezone=str(tz),
-            start_year=start_year,
-            end_year=end_year,
-            rows=rows,
+        return _with_summary(
+            PvSolarYieldResponse(
+                timezone=str(tz),
+                start_year=start_year,
+                end_year=end_year,
+                rows=rows,
+            ),
+            kwp=self._kwp(),
         )
 
-    async def monthly_year(self, year: int, tz: ZoneInfo) -> PvSolarYieldResponse:
+    async def monthly_year(
+        self, year: int, tz: ZoneInfo, *, peak_power_kwp: float | None = None
+    ) -> PvSolarYieldResponse:
         by_month = await self._by_month_merged(year, year, tz)
         rows = [
             PvSolarYieldRow(
@@ -181,9 +220,14 @@ class PvSolarService:
             )
             for m in range(1, 13)
         ]
-        return PvSolarYieldResponse(timezone=str(tz), year=year, rows=rows)
+        return _with_summary(
+            PvSolarYieldResponse(timezone=str(tz), year=year, rows=rows),
+            kwp=self._kwp(peak_power_kwp),
+        )
 
-    async def daily_month(self, year: int, month: int, tz: ZoneInfo) -> PvSolarYieldResponse:
+    async def daily_month(
+        self, year: int, month: int, tz: ZoneInfo, *, peak_power_kwp: float | None = None
+    ) -> PvSolarYieldResponse:
         if not 1 <= month <= 12:
             raise ValueError("month muss 1–12 sein.")
         start, end = _month_bounds(year, month, tz)
@@ -213,9 +257,20 @@ class PvSolarService:
             )
             for d in range(1, dim + 1)
         ]
-        return PvSolarYieldResponse(timezone=str(tz), year=year, month=month, rows=rows)
+        return _with_summary(
+            PvSolarYieldResponse(timezone=str(tz), year=year, month=month, rows=rows),
+            kwp=self._kwp(peak_power_kwp),
+        )
 
-    async def daily_week(self, year: int, month: int, week: int, tz: ZoneInfo) -> PvSolarYieldResponse:
+    async def daily_week(
+        self,
+        year: int,
+        month: int,
+        week: int,
+        tz: ZoneInfo,
+        *,
+        peak_power_kwp: float | None = None,
+    ) -> PvSolarYieldResponse:
         start, end = _week_bounds_in_month(year, month, week, tz)
         daily = await self.metrics.daily(MetricId.pv, start, end)
 
@@ -250,10 +305,88 @@ class PvSolarService:
                     value_kwh=by_date.get(d.isoformat()),
                 )
             )
-        return PvSolarYieldResponse(
-            timezone=str(tz),
-            year=year,
-            month=month,
-            week=week,
-            rows=rows,
+        return _with_summary(
+            PvSolarYieldResponse(
+                timezone=str(tz),
+                year=year,
+                month=month,
+                week=week,
+                rows=rows,
+            ),
+            kwp=self._kwp(peak_power_kwp),
+        )
+
+    async def yield_summary(
+        self,
+        tz: ZoneInfo,
+        *,
+        start_year: int | None = None,
+        end_year: int | None = None,
+        year: int | None = None,
+        month: int | None = None,
+        week: int | None = None,
+        peak_power_kwp: float | None = None,
+    ) -> PvSolarYieldSummary:
+        kwp = self._kwp(peak_power_kwp)
+
+        if week is not None:
+            if year is None or month is None:
+                raise ValueError("year und month sind für week erforderlich.")
+            resp = await self.daily_week(year, month, week, tz, peak_power_kwp=kwp)
+            return PvSolarYieldSummary(
+                timezone=str(tz),
+                scope="week",
+                label=f"Woche {week}, {_month_label(month)} {year}",
+                year=year,
+                month=month,
+                week=week,
+                total_kwh=resp.total_kwh,
+                peak_power_kwp=kwp,
+                specific_yield_kwh_per_kwp=resp.specific_yield_kwh_per_kwp,
+            )
+
+        if month is not None:
+            if year is None:
+                raise ValueError("year ist für month erforderlich.")
+            resp = await self.daily_month(year, month, tz, peak_power_kwp=kwp)
+            return PvSolarYieldSummary(
+                timezone=str(tz),
+                scope="month",
+                label=f"{_month_label(month)} {year}",
+                year=year,
+                month=month,
+                total_kwh=resp.total_kwh,
+                peak_power_kwp=kwp,
+                specific_yield_kwh_per_kwp=resp.specific_yield_kwh_per_kwp,
+            )
+
+        if year is not None:
+            resp = await self.monthly_year(year, tz, peak_power_kwp=kwp)
+            return PvSolarYieldSummary(
+                timezone=str(tz),
+                scope="year",
+                label=str(year),
+                year=year,
+                total_kwh=resp.total_kwh,
+                peak_power_kwp=kwp,
+                specific_yield_kwh_per_kwp=resp.specific_yield_kwh_per_kwp,
+            )
+
+        if start_year is not None and end_year is not None:
+            totals = await self.yearly_totals(start_year, end_year, tz, peak_power_kwp=kwp)
+            values = [t["value_kwh"] for t in totals if t["value_kwh"] is not None]
+            total = sum(values) if values else None
+            return PvSolarYieldSummary(
+                timezone=str(tz),
+                scope="range",
+                label=f"{start_year}–{end_year}",
+                start_year=start_year,
+                end_year=end_year,
+                total_kwh=total,
+                peak_power_kwp=kwp,
+                specific_yield_kwh_per_kwp=_specific_yield(total, kwp),
+            )
+
+        raise ValueError(
+            "Parameter unvollständig: range (start_year+end_year), year, month+year oder week+month+year."
         )

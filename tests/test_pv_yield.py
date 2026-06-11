@@ -53,6 +53,26 @@ def pv_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app.dependency_overrides.clear()
 
 
+def test_pv_yield_summary_kwp_per_kwp(pv_client: TestClient):
+    settings = Settings(
+        volkszaehler_base_url="http://volkszaehler.local:8080",
+        volkszaehler_uuid_pv="uuid-pv",
+        volkszaehler_raw_unit="kWh",
+        energy_timezone="Europe/Berlin",
+        pv_peak_power_kwp=10.0,
+        request_timeout_seconds=1,
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    r = pv_client.get("/api/v1/pv/yield/summary?year=2024&timezone=UTC")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["scope"] == "year"
+    assert data["total_kwh"] is not None
+    assert data["peak_power_kwp"] == 10.0
+    assert data["specific_yield_kwh_per_kwp"] == pytest.approx(data["total_kwh"] / 10.0)
+    app.dependency_overrides.clear()
+
+
 def test_pv_years(pv_client: TestClient):
     r = pv_client.get("/api/v1/pv/years")
     assert r.status_code == 200

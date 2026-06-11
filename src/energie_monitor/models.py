@@ -121,4 +121,24 @@ class PvSolarYieldResponse(BaseModel):
     year: int | None = None
     month: int | None = None
     week: int | None = None
+    total_kwh: float | None = Field(default=None, description="Summe Ertrag im Zeitraum (kWh)")
+    peak_power_kwp: float | None = Field(default=None, description="Installierte PV-Leistung (kWp)")
+    specific_yield_kwh_per_kwp: float | None = Field(
+        default=None, description="Spezifischer Ertrag total_kwh / peak_power_kwp (kWh/kWp)"
+    )
     rows: list[PvSolarYieldRow]
+
+
+class PvSolarYieldSummary(BaseModel):
+    unit: str = Field(default="kWh")
+    timezone: str
+    scope: str = Field(description="range | year | month | week")
+    label: str = Field(description="Lesbare Periodenbezeichnung")
+    start_year: int | None = None
+    end_year: int | None = None
+    year: int | None = None
+    month: int | None = None
+    week: int | None = None
+    total_kwh: float | None = None
+    peak_power_kwp: float | None = None
+    specific_yield_kwh_per_kwp: float | None = None
