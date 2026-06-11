@@ -256,6 +256,7 @@ class PvSolarService:
                 end,
                 group="day",
                 options="consumption",
+                chunk_days=35,
             )
             by_local = consumption_by_local_date(cons_pts, tz)
             missing: list[date] = []
@@ -266,20 +267,20 @@ class PvSolarService:
                     by_date[iso] = by_local[ld]
                 else:
                     missing.append(ld)
-            if missing:
-                raw_pts = await vz.vz_get_tuples(
+            for ld in missing:
+                w_start, w_end = local_window_bounds(ld, time(0, 0), time(0, 0), tz)
+                day_pts = await vz.vz_get_tuples(
                     self.metrics.client,
                     s,
                     s.volkszaehler_uuid_pv,
-                    start - timedelta(days=1),
-                    end + timedelta(days=1),
+                    w_start - timedelta(hours=1),
+                    w_end,
+                    chunk_days=2,
                 )
-                for ld in missing:
-                    w_start, w_end = local_window_bounds(ld, time(0, 0), time(0, 0), tz)
-                    window_pts = slice_points_for_window(raw_pts, w_start, w_end)
-                    by_date[ld.isoformat()] = (
-                        energy_kwh_from_power_kw(window_pts) if len(window_pts) >= 2 else None
-                    )
+                window_pts = slice_points_for_window(day_pts, w_start, w_end)
+                by_date[ld.isoformat()] = (
+                    energy_kwh_from_power_kw(window_pts) if len(window_pts) >= 2 else None
+                )
         else:
             daily = await self.metrics.daily(MetricId.pv, start, end)
             for b in daily.buckets:
