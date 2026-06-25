@@ -239,6 +239,22 @@ def rollup_period_energy_to_buckets(
     return out
 
 
+def estimate_daily_self_consumed_pv_kwh(import_kwh: float, pv_kwh: float) -> float:
+    """
+    PV-Eigenverbrauch aus Tages-Netzbezug und PV-Erzeugung (ohne Einspeisungszähler).
+
+    Erzeugung ≤ Bezug: gesamte Tageserzeugung typischerweise selbst verbraucht.
+    Erzeugung > Bezug: Überschuss teils Einspeisung – Anteil 40 % des Überschusses
+    als Eigenverbrauch (typische Größenordnung EFH mit PV).
+    """
+    if pv_kwh <= 0:
+        return 0.0
+    if pv_kwh <= import_kwh:
+        return pv_kwh
+    surplus = pv_kwh - import_kwh
+    return import_kwh + surplus * 0.4
+
+
 def energy_kwh_from_power_kw(points: list[tuple[datetime, float]]) -> float | None:
     """Trapezintegration einer kW-Leistungszeitreihe → kWh."""
     if len(points) < 2:

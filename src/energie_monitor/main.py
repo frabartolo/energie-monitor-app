@@ -15,6 +15,7 @@ from energie_monitor.aggregation import parse_clock
 from energie_monitor.models import (
     CurrentValueResponse,
     DailyAggregateResponse,
+    EnergyBalanceResponse,
     HourlyProfileResponse,
     LoadProfileResponse,
     MetricCatalogEntry,
@@ -159,6 +160,17 @@ async def energy_wallbox_split(
     if end.astimezone(UTC) <= start.astimezone(UTC):
         raise HTTPException(status_code=400, detail="end muss nach start liegen.")
     return await svc.wallbox_split(start, end)
+
+
+@app.get("/api/v1/energy/balance", response_model=EnergyBalanceResponse)
+async def energy_balance(
+    svc: Annotated[MetricService, Depends(metric_service)],
+    start: datetime = Query(..., description="Zeitraumstart"),
+    end: datetime = Query(..., description="Zeitraumende"),
+):
+    if end.astimezone(UTC) <= start.astimezone(UTC):
+        raise HTTPException(status_code=400, detail="end muss nach start liegen.")
+    return await svc.energy_balance(start, end)
 
 
 @app.get("/api/v1/metrics/{metric_id}/load-profile", response_model=LoadProfileResponse)

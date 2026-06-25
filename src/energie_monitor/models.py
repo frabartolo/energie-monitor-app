@@ -129,6 +129,21 @@ class PvSolarYieldResponse(BaseModel):
     rows: list[PvSolarYieldRow]
 
 
+class EnergyBalanceResponse(BaseModel):
+    start: datetime
+    end: datetime
+    unit: str = Field(default="kWh")
+    timezone: str
+    total_consumption_kwh: float | None = Field(
+        description="Gesamtverbrauch = Netzbezug + PV-Eigenverbrauch (kWh)"
+    )
+    grid_import_kwh: float | None = Field(description="Eingekaufter Strom / Netzbezug (kWh)")
+    self_consumed_pv_kwh: float | None = Field(
+        description="Selbst verbrauchte PV-Energie im Zeitraum (kWh)"
+    )
+    pv_generation_kwh: float | None = Field(description="PV-Erzeugung gesamt (kWh)")
+
+
 class PvSolarYieldSummary(BaseModel):
     unit: str = Field(default="kWh")
     timezone: str

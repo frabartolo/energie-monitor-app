@@ -14,6 +14,7 @@ from energie_monitor.aggregation import (
     daily_buckets_time_window,
     energy_kwh_from_apparent_va,
     energy_kwh_from_power_kw,
+    estimate_daily_self_consumed_pv_kwh,
     hourly_buckets_from_consumption_points,
     hourly_profile_mean_daily_kwh,
     interval_label,
@@ -30,6 +31,7 @@ from energie_monitor.models import (
     AggregateBucket,
     CurrentValueResponse,
     DailyAggregateResponse,
+    EnergyBalanceResponse,
     HourlyProfileBucket,
     HourlyProfileResponse,
     LoadProfilePoint,
@@ -695,6 +697,52 @@ class MetricService:
             "wallbox_kwh": wallbox,
             "haus_ohne_wallbox_kwh": net,
         }
+
+    async def energy_balance(self, start: datetime, end: datetime) -> EnergyBalanceResponse:
+        tz = self._resolve_tz(None)
+        haus_daily = await self.daily(MetricId.haus_gesamt, start, end)
+        pv_daily = await self.daily(MetricId.pv, start, end)
+        by_h = {b.period_start: b.value_kwh for b in haus_daily.buckets}
+        by_p = {b.period_start: b.value_kwh for b in pv_daily.buckets}
+
+        grid_import = 0.0
+        pv_generation = 0.0
+        self_consumed = 0.0
+        has_data = False
+
+        for ps in sorted(set(by_h) | set(by_p)):
+            imp = by_h.get(ps)
+            prod = by_p.get(ps)
+            if imp is None and prod is None:
+                continue
+            imp_v = imp or 0.0
+            prod_v = prod or 0.0
+            grid_import += imp_v
+            pv_generation += prod_v
+            self_consumed += estimate_daily_self_consumed_pv_kwh(imp_v, prod_v)
+            has_data = True
+
+        if not has_data:
+            return EnergyBalanceResponse(
+                start=start,
+                end=end,
+                timezone=str(tz),
+                total_consumption_kwh=None,
+                grid_import_kwh=None,
+                self_consumed_pv_kwh=None,
+                pv_generation_kwh=None,
+            )
+
+        total = grid_import + self_consumed
+        return EnergyBalanceResponse(
+            start=start,
+            end=end,
+            timezone=str(tz),
+            total_consumption_kwh=total,
+            grid_import_kwh=grid_import,
+            self_consumed_pv_kwh=self_consumed,
+            pv_generation_kwh=pv_generation,
+        )
 
 
 def _clock_label(t: time | None) -> str | None:
