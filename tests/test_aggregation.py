@@ -7,7 +7,9 @@ from energie_monitor.aggregation import (
     daily_buckets_from_apparent_va,
     daily_buckets_from_cumulative,
     energy_kwh_from_apparent_va,
+    load_profile_from_period_energy,
     rollup_daily_to_monthly,
+    rollup_period_energy_to_buckets,
 )
 
 
@@ -85,3 +87,23 @@ def test_monthly_rollup():
     assert len(m) == 2
     assert m[0][2] == 5.0
     assert m[1][2] == 10.0
+
+
+def test_load_profile_from_period_energy():
+    t0 = datetime(2025, 1, 1, tzinfo=UTC)
+    t1 = datetime(2025, 1, 2, tzinfo=UTC)
+    buckets = load_profile_from_period_energy([(t0, t1, 24.0)])
+    assert buckets[0][1] == pytest.approx(1.0)
+    assert buckets[0][2] == pytest.approx(24.0)
+
+
+def test_rollup_period_energy_to_buckets():
+    t0 = datetime(2025, 1, 1, 0, 0, tzinfo=UTC)
+    hourly = [
+        (t0 + timedelta(hours=i), t0 + timedelta(hours=i + 1), 1.0) for i in range(6)
+    ]
+    end = t0 + timedelta(hours=6)
+    rolled = rollup_period_energy_to_buckets(hourly, t0, end, timedelta(hours=3))
+    assert len(rolled) == 2
+    assert rolled[0][2] == pytest.approx(3.0)
+    assert rolled[1][2] == pytest.approx(3.0)

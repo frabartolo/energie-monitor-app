@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -28,15 +28,13 @@ async def ha_get_state(client: httpx.AsyncClient, settings: Settings, entity_id:
     return r.json()
 
 
-async def ha_get_history(
+async def _ha_get_history_single(
     client: httpx.AsyncClient,
     settings: Settings,
     entity_id: str,
     start: datetime,
     end: datetime,
 ) -> list[dict[str, Any]]:
-    if not settings.homeassistant_base_url or not settings.homeassistant_token:
-        raise RuntimeError("Home Assistant ist nicht konfiguriert (BASE_URL / TOKEN).")
     start_utc = start.astimezone(UTC)
     end_utc = end.astimezone(UTC)
     url = (
@@ -61,6 +59,33 @@ async def ha_get_history(
     if isinstance(first, list):
         return [x for x in first if isinstance(x, dict)]
     return []
+
+
+async def ha_get_history(
+    client: httpx.AsyncClient,
+    settings: Settings,
+    entity_id: str,
+    start: datetime,
+    end: datetime,
+) -> list[dict[str, Any]]:
+    if not settings.homeassistant_base_url or not settings.homeassistant_token:
+        raise RuntimeError("Home Assistant ist nicht konfiguriert (BASE_URL / TOKEN).")
+    start_utc = start.astimezone(UTC)
+    end_utc = end.astimezone(UTC)
+    if end_utc <= start_utc:
+        return []
+
+    # Lange Zeiträume in Monatsblöcken, sonst Timeout bei HA history API.
+    if end_utc - start_utc <= timedelta(days=31):
+        return await _ha_get_history_single(client, settings, entity_id, start_utc, end_utc)
+
+    merged: list[dict[str, Any]] = []
+    cursor = start_utc
+    while cursor < end_utc:
+        chunk_end = min(cursor + timedelta(days=31), end_utc)
+        merged.extend(await _ha_get_history_single(client, settings, entity_id, cursor, chunk_end))
+        cursor = chunk_end
+    return merged
 
 
 def ha_state_to_float(state: dict[str, Any]) -> float | None:

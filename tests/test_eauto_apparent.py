@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,9 +28,14 @@ def apparent_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     )
     app.dependency_overrides[get_settings] = lambda: settings
 
-    async def fake_vz(_client, _settings, uuid: str, start: datetime, end: datetime):
+    async def fake_vz(_client, _settings, uuid: str, start: datetime, end: datetime, **kwargs):
         t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
         t_prev = t0 - timedelta(hours=1)
+        if kwargs.get("group") == "day" and kwargs.get("options") == "consumption" and uuid == "uuid-haus":
+            berlin = ZoneInfo("Europe/Berlin")
+            d1 = datetime(2026, 5, 3, 0, 0, tzinfo=berlin).astimezone(UTC)
+            d2 = datetime(2026, 5, 4, 0, 0, tzinfo=berlin).astimezone(UTC)
+            return [(d1, 15.0), (d2, 15.0)]
         if uuid == "uuid-haus":
             return [
                 (t_prev, 90.0),
@@ -68,19 +74,19 @@ def apparent_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 
 def test_eauto_daily_from_apparent_power(apparent_client: TestClient):
-    start = "2026-05-01T00:00:00Z"
-    end = "2026-05-03T00:00:00Z"
+    start = "2026-05-01T22:00:00Z"
+    end = "2026-05-03T22:00:00Z"
     r = apparent_client.get(f"/api/v1/metrics/eauto/aggregate/daily?start={start}&end={end}")
     assert r.status_code == 200
     buckets = r.json()["buckets"]
     assert len(buckets) == 2
     assert buckets[0]["value_kwh"] == pytest.approx(12.0, rel=0.05)
-    assert buckets[1]["value_kwh"] == pytest.approx(12.0, rel=0.05)
+    assert buckets[1]["value_kwh"] == pytest.approx(6.0, rel=0.05)
 
 
 def test_haus_ohne_eauto_with_apparent_wallbox(apparent_client: TestClient):
-    start = "2026-05-01T00:00:00Z"
-    end = "2026-05-03T00:00:00Z"
+    start = "2026-05-01T22:00:00Z"
+    end = "2026-05-03T22:00:00Z"
     haus = apparent_client.get(
         f"/api/v1/metrics/haus_gesamt/aggregate/daily?start={start}&end={end}"
     ).json()["buckets"]

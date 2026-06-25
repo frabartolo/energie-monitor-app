@@ -50,7 +50,10 @@ def load_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     )
     app.dependency_overrides[get_settings] = lambda: settings
 
-    async def fake_vz(_client, _settings, uuid: str, start: datetime, end: datetime):
+    async def fake_vz(_client, _settings, uuid: str, start: datetime, end: datetime, **kwargs):
+        if kwargs.get("group"):
+            t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
+            return [(t0 + timedelta(days=i), 1.0) for i in range(5)]
         t0 = datetime(2026, 5, 1, 0, 0, tzinfo=UTC)
         return [
             (t0, 0.0),
@@ -67,6 +70,29 @@ def load_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     app.dependency_overrides.clear()
     get_settings.cache_clear()
+
+
+def test_load_profile_api_year_uses_consumption(load_client: TestClient, monkeypatch: pytest.MonkeyPatch):
+    calls: list[dict] = []
+
+    async def fake_vz(_client, _settings, uuid: str, start: datetime, end: datetime, **kwargs):
+        calls.append(kwargs)
+        tz = UTC
+        day = datetime(2025, 1, 1, tzinfo=tz)
+        return [(day + timedelta(days=i), 10.0) for i in range(365)]
+
+    monkeypatch.setattr(vz, "vz_get_tuples", fake_vz)
+    r = load_client.get(
+        "/api/v1/metrics/haus_gesamt/load-profile"
+        "?start=2025-01-01T00:00:00Z&end=2025-12-31T23:59:59Z&interval=auto"
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["interval"] == "1d"
+    assert 365 <= len(data["points"]) <= 366
+    assert calls and calls[0].get("group") == "day"
+    assert calls[0].get("options") == "consumption"
+    assert sum(p["energy_kwh"] or 0 for p in data["points"]) == pytest.approx(3650.0, rel=0.02)
 
 
 def test_load_profile_api(load_client: TestClient):

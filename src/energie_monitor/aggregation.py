@@ -159,6 +159,86 @@ def load_profile_buckets(
     return out
 
 
+def load_profile_from_period_energy(
+    periods: list[tuple[datetime, datetime, float | None]],
+) -> list[tuple[datetime, float | None, float | None]]:
+    """Fertige Energie-Intervalle → Lastgang (Ø-Leistung + Energie)."""
+    out: list[tuple[datetime, float | None, float | None]] = []
+    for period_start, period_end, energy in periods:
+        hours = (period_end.astimezone(UTC) - period_start.astimezone(UTC)).total_seconds() / 3600.0
+        power = energy / hours if energy is not None and hours > 0 else None
+        out.append((period_start, power, energy))
+    return out
+
+
+def hourly_buckets_from_consumption_points(
+    points: list[tuple[datetime, float]],
+    start: datetime,
+    end: datetime,
+    tz: ZoneInfo,
+) -> list[tuple[datetime, datetime, float | None]]:
+    """Volkszähler group=hour&consumption → Stundenintervalle (Ortszeit)."""
+    by_hour_start: dict[datetime, float] = {}
+    for ts, val in points:
+        local = ts.astimezone(tz)
+        if local.minute == 0 and local.second == 0 and local.microsecond == 0:
+            hour_start_local = local - timedelta(hours=1)
+        else:
+            hour_start_local = local.replace(minute=0, second=0, microsecond=0)
+        by_hour_start[hour_start_local.astimezone(UTC)] = val
+
+    start_u = start.astimezone(UTC)
+    end_u = end.astimezone(UTC)
+    if end_u <= start_u:
+        return []
+
+    cur_local = start.astimezone(tz).replace(minute=0, second=0, microsecond=0)
+    out: list[tuple[datetime, datetime, float | None]] = []
+    while True:
+        hour_start = cur_local.astimezone(UTC)
+        hour_end = (cur_local + timedelta(hours=1)).astimezone(UTC)
+        if hour_start >= end_u:
+            break
+        if hour_end > start_u and hour_start < end_u:
+            clipped_start = max(hour_start, start_u)
+            clipped_end = min(hour_end, end_u)
+            if clipped_start < clipped_end:
+                out.append((clipped_start, clipped_end, by_hour_start.get(hour_start)))
+        cur_local += timedelta(hours=1)
+    return out
+
+
+def rollup_period_energy_to_buckets(
+    periods: list[tuple[datetime, datetime, float | None]],
+    start: datetime,
+    end: datetime,
+    bucket: timedelta,
+) -> list[tuple[datetime, float | None, float | None]]:
+    """Summiert feinere Energie-Intervalle zu größeren Lastgang-Buckets."""
+    start_u = start.astimezone(UTC)
+    end_u = end.astimezone(UTC)
+    if end_u <= start_u:
+        return []
+    out: list[tuple[datetime, float | None, float | None]] = []
+    cur = start_u
+    while cur < end_u:
+        nxt = min(cur + bucket, end_u)
+        total = 0.0
+        found = False
+        for ps, pe, val in periods:
+            if pe <= cur or ps >= nxt:
+                continue
+            if val is not None:
+                total += val
+                found = True
+        energy = total if found else None
+        hours = (nxt - cur).total_seconds() / 3600.0
+        power = energy / hours if energy is not None and hours > 0 else None
+        out.append((cur, power, energy))
+        cur = nxt
+    return out
+
+
 def energy_kwh_from_power_kw(points: list[tuple[datetime, float]]) -> float | None:
     """Trapezintegration einer kW-Leistungszeitreihe → kWh."""
     if len(points) < 2:
@@ -194,18 +274,34 @@ def energy_kwh_from_apparent_va(points: list[tuple[datetime, float]]) -> float |
     return total_kva_h
 
 
+def _iter_daily_periods(
+    start: datetime, end: datetime, tz: ZoneInfo | None = None
+) -> list[tuple[datetime, datetime]]:
+    """Tagesintervalle im Abfragefenster (lokal oder UTC)."""
+    out: list[tuple[datetime, datetime]] = []
+    if tz is not None:
+        for day in _local_dates_in_range(start, end, tz):
+            ps, pe = local_window_bounds(day, time(0, 0), time(0, 0), tz)
+            clipped = _clip_period_to_query(ps, pe, start, end)
+            if clipped is not None:
+                out.append(clipped)
+        return out
+    for day in _calendar_days_in_range(start, end):
+        nxt = day + timedelta(days=1)
+        clipped = _clip_period_to_query(day, nxt, start, end)
+        if clipped is not None:
+            out.append(clipped)
+    return out
+
+
 def daily_buckets_from_apparent_va(
     points: list[tuple[datetime, float]],
     start: datetime,
     end: datetime,
+    tz: ZoneInfo | None = None,
 ) -> list[tuple[datetime, datetime, float | None]]:
     out: list[tuple[datetime, datetime, float | None]] = []
-    for day in _calendar_days_in_range(start, end):
-        nxt = day + timedelta(days=1)
-        clipped = _clip_period_to_query(day, nxt, start, end)
-        if clipped is None:
-            continue
-        ps, pe = clipped
+    for ps, pe in _iter_daily_periods(start, end, tz):
         window_pts = slice_points_for_window(points, ps, pe)
         if len(window_pts) < 2:
             out.append((ps, pe, None))
@@ -238,18 +334,14 @@ def daily_buckets_from_cumulative(
     points: list[tuple[datetime, float]],
     start: datetime,
     end: datetime,
+    tz: ZoneInfo | None = None,
 ) -> list[tuple[datetime, datetime, float | None]]:
     """
-    Verbrauch pro überlapptem UTC-Kalendertag; period_start/end liegen im Abfragefenster
-  (wichtig für Grafana-Zeitpicker bei kurzen Bereichen).
+    Verbrauch pro Kalendertag; period_start/end liegen im Abfragefenster.
+    Mit tz: lokale Kalendertage (Ortszeit).
     """
     out: list[tuple[datetime, datetime, float | None]] = []
-    for day in _calendar_days_in_range(start, end):
-        nxt = day + timedelta(days=1)
-        clipped = _clip_period_to_query(day, nxt, start, end)
-        if clipped is None:
-            continue
-        ps, pe = clipped
+    for ps, pe in _iter_daily_periods(start, end, tz):
         window_pts = slice_points_for_window(points, ps, pe)
         if len(window_pts) < 2:
             out.append((ps, pe, None))

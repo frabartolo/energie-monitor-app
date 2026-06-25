@@ -14,12 +14,15 @@ from energie_monitor.aggregation import (
     daily_buckets_time_window,
     energy_kwh_from_apparent_va,
     energy_kwh_from_power_kw,
+    hourly_buckets_from_consumption_points,
     hourly_profile_mean_daily_kwh,
     interval_label,
     load_profile_buckets,
+    load_profile_from_period_energy,
     resolve_load_profile_interval,
     rollup_daily_to_monthly,
     rollup_daily_to_yearly,
+    rollup_period_energy_to_buckets,
     slice_points_for_window,
 )
 from energie_monitor.config import Settings
@@ -50,6 +53,11 @@ _WP_CATALOG = (
     (MetricId.waermepumpe_kuehlen, "Wärmepumpe – El. Energie Kühlen"),
 )
 
+_VZ_CONSUMPTION_CHUNK_DAYS = 35
+
+_LOAD_PROFILE_CACHE: dict[tuple[str, str, str, str], tuple[datetime, LoadProfileResponse]] = {}
+_LOAD_PROFILE_CACHE_TTL = timedelta(seconds=120)
+
 
 class MetricService:
     def __init__(self, settings: Settings, client: httpx.AsyncClient):
@@ -73,14 +81,74 @@ class MetricService:
     def _pv_is_power(self) -> bool:
         return self.settings.pv_measurement == "instantaneous_power_kw"
 
+    def _volkszaehler_uuid(self, metric_id: MetricId) -> str | None:
+        s = self.settings
+        if metric_id == MetricId.haus_gesamt:
+            return s.volkszaehler_uuid_haus
+        if metric_id == MetricId.pv and not self._pv_is_power():
+            return s.volkszaehler_uuid_pv
+        return None
+
+    @staticmethod
+    def _vz_consumption_group(bucket: timedelta, span: timedelta) -> str | None:
+        if bucket >= timedelta(days=1):
+            return "day"
+        if bucket >= timedelta(hours=1) and span > timedelta(hours=48):
+            return "hour"
+        return None
+
+    async def _fetch_vz_consumption(
+        self, uuid: str, start: datetime, end: datetime, *, group: str
+    ) -> list[tuple[datetime, float]]:
+        return await vz.vz_get_tuples(
+            self.client,
+            self.settings,
+            uuid,
+            start,
+            end,
+            group=group,
+            options="consumption",
+            chunk_days=_VZ_CONSUMPTION_CHUNK_DAYS,
+        )
+
+    async def _daily_via_vz_consumption(
+        self, metric_id: MetricId, uuid: str, start: datetime, end: datetime
+    ) -> list[AggregateBucket]:
+        pts = await self._fetch_vz_consumption(uuid, start, end, group="day")
+        tz = self._resolve_tz(None)
+        raw = daily_buckets_from_consumption_points(pts, start, end, tz=tz)
+        return [AggregateBucket(period_start=a, period_end=b, value_kwh=c) for a, b, c in raw]
+
+    async def _load_profile_via_vz_consumption(
+        self, metric_id: MetricId, uuid: str, start: datetime, end: datetime, bucket: timedelta
+    ) -> list[LoadProfilePoint]:
+        group = self._vz_consumption_group(bucket, end - start)
+        if group is None:
+            raise ValueError("interval zu fein für Volkszähler-Aggregation")
+        pts = await self._fetch_vz_consumption(uuid, start, end, group=group)
+        tz = self._resolve_tz(None)
+        if group == "day":
+            periods = daily_buckets_from_consumption_points(pts, start, end, tz=tz)
+            raw = load_profile_from_period_energy(periods)
+        else:
+            periods = hourly_buckets_from_consumption_points(pts, start, end, tz)
+            raw = rollup_period_energy_to_buckets(periods, start, end, bucket)
+        return [LoadProfilePoint(timestamp=ts, power_kw=p, energy_kwh=e) for ts, p, e in raw]
+
     def _daily_buckets_raw(
-        self, metric_id: MetricId, pts: list[tuple[datetime, float]], start: datetime, end: datetime
+        self,
+        metric_id: MetricId,
+        pts: list[tuple[datetime, float]],
+        start: datetime,
+        end: datetime,
+        *,
+        tz: ZoneInfo | None = None,
     ) -> list[tuple[datetime, datetime, float | None]]:
         if metric_id == MetricId.eauto and self._eauto_apparent_va():
-            return daily_buckets_from_apparent_va(pts, start, end)
+            return daily_buckets_from_apparent_va(pts, start, end, tz)
         if metric_id == MetricId.pv and self._pv_is_power():
             return daily_buckets_from_power_kw(pts, start, end)
-        return daily_buckets_from_cumulative(pts, start, end)
+        return daily_buckets_from_cumulative(pts, start, end, tz)
 
     def _window_energy_kwh(
         self, metric_id: MetricId, window_pts: list[tuple[datetime, float]]
@@ -323,7 +391,6 @@ class MetricService:
             return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
 
         # PV (Leistung in kW) für große Zeiträume: Volkszähler soll direkt Tagesverbrauch aggregieren.
-        # Das verhindert Millionen Rohpunkte und macht /pv/yield/year wieder performant.
         if metric_id == MetricId.pv and self._pv_is_power():
             s = self.settings
             if s.volkszaehler_uuid_pv:
@@ -341,8 +408,14 @@ class MetricService:
                 buckets = [AggregateBucket(period_start=a, period_end=b, value_kwh=c) for a, b, c in raw]
                 return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
 
+        vz_uuid = self._volkszaehler_uuid(metric_id)
+        if vz_uuid:
+            buckets = await self._daily_via_vz_consumption(metric_id, vz_uuid, start, end)
+            return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
+
         pts = await self._points(metric_id, start - timedelta(days=1), end + timedelta(days=1))
-        raw = self._daily_buckets_raw(metric_id, pts, start, end)
+        tz = self._resolve_tz(None)
+        raw = self._daily_buckets_raw(metric_id, pts, start, end, tz=tz)
         buckets = [AggregateBucket(period_start=a, period_end=b, value_kwh=c) for a, b, c in raw]
         return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
 
@@ -398,6 +471,27 @@ class MetricService:
         end: datetime,
         interval: str,
     ) -> LoadProfileResponse:
+        cache_key = (
+            metric_id.value,
+            start.astimezone(UTC).isoformat(),
+            end.astimezone(UTC).isoformat(),
+            interval,
+        )
+        now = datetime.now(UTC)
+        cached = _LOAD_PROFILE_CACHE.get(cache_key)
+        if cached and cached[0] > now:
+            return cached[1].model_copy(deep=True)
+        result = await self._load_profile_compute(metric_id, start, end, interval)
+        _LOAD_PROFILE_CACHE[cache_key] = (now + _LOAD_PROFILE_CACHE_TTL, result.model_copy(deep=True))
+        return result
+
+    async def _load_profile_compute(
+        self,
+        metric_id: MetricId,
+        start: datetime,
+        end: datetime,
+        interval: str,
+    ) -> LoadProfileResponse:
         bucket = resolve_load_profile_interval(interval, start, end)
         unit = "kW"
         if metric_id == MetricId.haus_ohne_eauto:
@@ -427,6 +521,40 @@ class MetricService:
                 metric_id=metric_id,
                 unit="kW",
                 interval=h.interval,
+                start=start,
+                end=end,
+                points=points,
+            )
+
+        vz_uuid = self._volkszaehler_uuid(metric_id)
+        vz_group = self._vz_consumption_group(bucket, end - start)
+        if vz_uuid and vz_group:
+            points = await self._load_profile_via_vz_consumption(
+                metric_id, vz_uuid, start, end, bucket
+            )
+            return LoadProfileResponse(
+                metric_id=metric_id,
+                unit=unit,
+                interval=interval_label(bucket),
+                start=start,
+                end=end,
+                points=points,
+            )
+
+        entity_id = self._ha_entity_for(metric_id)
+        if entity_id and bucket >= timedelta(days=1) and (end - start) > timedelta(hours=48):
+            daily_resp = await self.daily(metric_id, start, end)
+            if self._use_apparent_for(metric_id):
+                unit = "kVA"
+            periods = [(b.period_start, b.period_end, b.value_kwh) for b in daily_resp.buckets]
+            raw = load_profile_from_period_energy(periods)
+            points = [
+                LoadProfilePoint(timestamp=ts, power_kw=p, energy_kwh=e) for ts, p, e in raw
+            ]
+            return LoadProfileResponse(
+                metric_id=metric_id,
+                unit=unit,
+                interval=interval_label(bucket),
                 start=start,
                 end=end,
                 points=points,

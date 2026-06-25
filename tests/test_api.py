@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -24,7 +25,14 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     app.dependency_overrides[get_settings] = lambda: settings
 
-    async def fake_vz_get_tuples(_client, _settings, uuid: str, start: datetime, end: datetime):
+    async def fake_vz_get_tuples(_client, _settings, uuid: str, start: datetime, end: datetime, **kwargs):
+        if kwargs.get("group") == "day" and kwargs.get("options") == "consumption":
+            berlin = ZoneInfo("Europe/Berlin")
+            if uuid == "uuid-pv":
+                d1 = datetime(2026, 4, 2, 0, 0, tzinfo=berlin).astimezone(UTC)
+                d2 = datetime(2026, 4, 3, 0, 0, tzinfo=berlin).astimezone(UTC)
+                return [(d1, 5.0), (d2, 4.0)]
+            return [(datetime(2026, 4, 2, 0, 0, tzinfo=berlin).astimezone(UTC), 1.0)]
         start_u = start.astimezone(UTC)
         end_u = end.astimezone(UTC)
         if uuid == "uuid-pv":
@@ -120,8 +128,8 @@ def test_timeseries_pv_returns_points(client: TestClient):
 
 
 def test_daily_aggregate_pv_returns_expected_consumption(client: TestClient):
-    start = "2026-04-01T00:00:00Z"
-    end = "2026-04-03T00:00:00Z"
+    start = "2026-03-31T22:00:00Z"
+    end = "2026-04-02T22:00:00Z"
     r = client.get(f"/api/v1/metrics/pv/aggregate/daily?start={start}&end={end}")
     assert r.status_code == 200
     buckets = r.json()["buckets"]
