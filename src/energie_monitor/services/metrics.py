@@ -53,7 +53,7 @@ _WP_CATALOG = (
     (MetricId.waermepumpe_kuehlen, "Wärmepumpe – El. Energie Kühlen"),
 )
 
-_VZ_CONSUMPTION_CHUNK_DAYS = 35
+_VZ_CONSUMPTION_CHUNK_DAYS = 7
 
 _LOAD_PROFILE_CACHE: dict[tuple[str, str, str, str], tuple[datetime, LoadProfileResponse]] = {}
 _LOAD_PROFILE_CACHE_TTL = timedelta(seconds=120)
@@ -86,6 +86,15 @@ class MetricService:
         if metric_id == MetricId.haus_gesamt:
             return s.volkszaehler_uuid_haus
         if metric_id == MetricId.pv and not self._pv_is_power():
+            return s.volkszaehler_uuid_pv
+        return None
+
+    def _vz_uuid_for_consumption(self, metric_id: MetricId) -> str | None:
+        """Volkszähler-Kanal für group=day/hour&consumption (auch PV-Leistung)."""
+        s = self.settings
+        if metric_id == MetricId.haus_gesamt:
+            return s.volkszaehler_uuid_haus
+        if metric_id == MetricId.pv:
             return s.volkszaehler_uuid_pv
         return None
 
@@ -526,7 +535,7 @@ class MetricService:
                 points=points,
             )
 
-        vz_uuid = self._volkszaehler_uuid(metric_id)
+        vz_uuid = self._vz_uuid_for_consumption(metric_id)
         vz_group = self._vz_consumption_group(bucket, end - start)
         if vz_uuid and vz_group:
             points = await self._load_profile_via_vz_consumption(

@@ -256,7 +256,7 @@ class PvSolarService:
                 end,
                 group="day",
                 options="consumption",
-                chunk_days=35,
+                chunk_days=7,
             )
             by_local = consumption_by_local_date(cons_pts, tz)
             missing: list[date] = []

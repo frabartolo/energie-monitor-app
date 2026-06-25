@@ -8,9 +8,12 @@ import httpx
 
 from energie_monitor.config import Settings
 
-# Große Zeiträume in einem Request lösen bei Volkszähler oft 504 aus → chunking.
+# Rohdaten: kurze Chunks wegen Timeouts bei Volkszähler.
 DEFAULT_CHUNK_DAYS = 3
-MAX_PARALLEL_CHUNKS = 8
+# Tages-/Stunden-Aggregate: kleine Chunks, wenig Parallelität (sonst 504 → Lücken).
+AGGREGATE_CHUNK_DAYS = 7
+MAX_PARALLEL_CHUNKS = 2
+CHUNK_RETRIES = 3
 
 
 def volkszaehler_value_to_kwh(settings: Settings, raw: float) -> float:
@@ -78,6 +81,38 @@ async def _vz_fetch_chunk(
     return _parse_tuples_from_payload(settings, r.json())
 
 
+async def _vz_fetch_chunk_retry(
+    client: httpx.AsyncClient,
+    settings: Settings,
+    uuid: str,
+    start: datetime,
+    end: datetime,
+    *,
+    group: str | None = None,
+    tuples: int | None = None,
+    options: str | None = None,
+) -> list[tuple[datetime, float]]:
+    last_exc: httpx.HTTPError | None = None
+    for attempt in range(CHUNK_RETRIES):
+        try:
+            return await _vz_fetch_chunk(
+                client,
+                settings,
+                uuid,
+                start,
+                end,
+                group=group,
+                tuples=tuples,
+                options=options,
+            )
+        except httpx.HTTPError as exc:
+            last_exc = exc
+            if attempt + 1 < CHUNK_RETRIES:
+                await asyncio.sleep(0.25 * (2**attempt))
+    assert last_exc is not None
+    raise last_exc
+
+
 def _merge_points(chunks: list[list[tuple[datetime, float]]]) -> list[tuple[datetime, float]]:
     by_ts: dict[datetime, float] = {}
     for part in chunks:
@@ -101,6 +136,70 @@ def _chunk_ranges(
     return ranges
 
 
+def _effective_chunk_days(
+    chunk_days: int, group: str | None, options: str | None
+) -> int:
+    if group and options == "consumption":
+        if group == "day":
+            return min(chunk_days, AGGREGATE_CHUNK_DAYS)
+        if group == "hour":
+            return min(chunk_days, 14)
+    return chunk_days
+
+
+async def _load_chunk_resilient(
+    client: httpx.AsyncClient,
+    settings: Settings,
+    uuid: str,
+    chunk_start: datetime,
+    chunk_end: datetime,
+    *,
+    group: str | None,
+    tuples: int | None,
+    options: str | None,
+    min_split_days: int = 1,
+) -> list[tuple[datetime, float]]:
+    try:
+        return await _vz_fetch_chunk_retry(
+            client,
+            settings,
+            uuid,
+            chunk_start,
+            chunk_end,
+            group=group,
+            tuples=tuples,
+            options=options,
+        )
+    except httpx.HTTPError:
+        span_days = (chunk_end - chunk_start).total_seconds() / 86400.0
+        if span_days <= min_split_days:
+            return []
+        mid = chunk_start + (chunk_end - chunk_start) / 2
+        left = await _load_chunk_resilient(
+            client,
+            settings,
+            uuid,
+            chunk_start,
+            mid,
+            group=group,
+            tuples=tuples,
+            options=options,
+            min_split_days=min_split_days,
+        )
+        right = await _load_chunk_resilient(
+            client,
+            settings,
+            uuid,
+            mid,
+            chunk_end,
+            group=group,
+            tuples=tuples,
+            options=options,
+            min_split_days=min_split_days,
+        )
+        return _merge_points([left, right])
+
+
 async def vz_get_tuples(
     client: httpx.AsyncClient,
     settings: Settings,
@@ -120,9 +219,11 @@ async def vz_get_tuples(
     if end_u <= start_u:
         return []
 
-    if end_u - start_u <= timedelta(days=chunk_days):
+    effective_chunk = _effective_chunk_days(chunk_days, group, options)
+
+    if end_u - start_u <= timedelta(days=effective_chunk):
         try:
-            return await _vz_fetch_chunk(
+            return await _vz_fetch_chunk_retry(
                 client,
                 settings,
                 uuid,
@@ -133,26 +234,32 @@ async def vz_get_tuples(
                 options=options,
             )
         except httpx.HTTPError:
-            return []
+            return await _load_chunk_resilient(
+                client,
+                settings,
+                uuid,
+                start_u,
+                end_u,
+                group=group,
+                tuples=tuples,
+                options=options,
+            )
 
-    ranges = _chunk_ranges(start_u, end_u, chunk_days)
+    ranges = _chunk_ranges(start_u, end_u, effective_chunk)
     sem = asyncio.Semaphore(MAX_PARALLEL_CHUNKS)
 
     async def load_one(chunk_start: datetime, chunk_end: datetime) -> list[tuple[datetime, float]]:
         async with sem:
-            try:
-                return await _vz_fetch_chunk(
-                    client,
-                    settings,
-                    uuid,
-                    chunk_start,
-                    chunk_end,
-                    group=group,
-                    tuples=tuples,
-                    options=options,
-                )
-            except httpx.HTTPError:
-                return []
+            return await _load_chunk_resilient(
+                client,
+                settings,
+                uuid,
+                chunk_start,
+                chunk_end,
+                group=group,
+                tuples=tuples,
+                options=options,
+            )
 
     parts = await asyncio.gather(*(load_one(a, b) for a, b in ranges))
     return _merge_points(list(parts))
