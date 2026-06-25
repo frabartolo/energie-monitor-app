@@ -7,6 +7,7 @@ import httpx
 
 from energie_monitor.aggregation import (
     consumption_kwh_cumulative,
+    daily_balance_kwh,
     daily_buckets_from_apparent_va,
     daily_buckets_from_cumulative,
     daily_buckets_from_consumption_points,
@@ -14,12 +15,12 @@ from energie_monitor.aggregation import (
     daily_buckets_time_window,
     energy_kwh_from_apparent_va,
     energy_kwh_from_power_kw,
-    estimate_daily_self_consumed_pv_kwh,
     hourly_buckets_from_consumption_points,
     hourly_profile_mean_daily_kwh,
     interval_label,
     load_profile_buckets,
     load_profile_from_period_energy,
+    raw_energy_to_kwh,
     resolve_load_profile_interval,
     rollup_daily_to_monthly,
     rollup_daily_to_yearly,
@@ -247,10 +248,16 @@ class MetricService:
         return ha.ha_history_to_points(rows)
 
     async def _points_haus(self, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
-        s = self.settings
-        if not s.volkszaehler_uuid_haus:
+        uuid = self.settings.volkszaehler_uuid_haus
+        if not uuid:
             return []
-        return await vz.vz_get_tuples(self.client, s, s.volkszaehler_uuid_haus, start, end)
+        return await vz.vz_get_tuples(self.client, self.settings, uuid, start, end)
+
+    async def _points_haus_power(self, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
+        uuid = self.settings.volkszaehler_uuid_haus_power
+        if not uuid:
+            return []
+        return await vz.vz_get_tuples(self.client, self.settings, uuid, start, end)
 
     async def _points_pv(self, start: datetime, end: datetime) -> list[tuple[datetime, float]]:
         s = self.settings
@@ -308,6 +315,12 @@ class MetricService:
                 val = (raw / 1000.0) if raw is not None else None
                 return CurrentValueResponse(metric_id=metric_id, timestamp=lc, value=val, unit="kVA")
             return CurrentValueResponse(metric_id=metric_id, timestamp=now, value=None, unit="kVA")
+        if metric_id == MetricId.haus_gesamt and self.settings.volkszaehler_uuid_haus_power:
+            start = now - timedelta(hours=6)
+            points = await self._points_haus_power(start, now)
+            if points:
+                ts, val = points[-1]
+                return CurrentValueResponse(metric_id=metric_id, timestamp=ts, value=val, unit="kW")
         start = now - timedelta(days=2)
         points = await self._points(metric_id, start, now)
         if points:
@@ -681,6 +694,32 @@ class MetricService:
             buckets=[HourlyProfileBucket(hour=h, value_kwh=v) for h, v in profile],
         )
 
+    def _has_grid_export_source(self) -> bool:
+        s = self.settings
+        return bool(s.volkszaehler_uuid_grid_export or s.entity_id_grid_export_energy)
+
+    async def _daily_grid_export(self, start: datetime, end: datetime) -> dict[datetime, float]:
+        s = self.settings
+        tz = self._resolve_tz(None)
+        if s.volkszaehler_uuid_grid_export:
+            buckets = await self._daily_via_vz_consumption(
+                MetricId.haus_gesamt, s.volkszaehler_uuid_grid_export, start, end
+            )
+            return {
+                b.period_start: b.value_kwh
+                for b in buckets
+                if b.value_kwh is not None and b.value_kwh >= 0
+            }
+        if s.entity_id_grid_export_energy and s.homeassistant_base_url and s.homeassistant_token:
+            pts = await self._points_ha_entity(s.entity_id_grid_export_energy, start, end)
+            if not pts:
+                return {}
+            unit = s.grid_export_raw_unit
+            pts_kwh = [(ts, raw_energy_to_kwh(unit, val)) for ts, val in pts]
+            raw = daily_buckets_from_cumulative(pts_kwh, start, end, tz)
+            return {a: c for a, _b, c in raw if c is not None and c >= 0}
+        return {}
+
     async def wallbox_split(self, start: datetime, end: datetime) -> dict:
         haus = await self.window_consumption_kwh(MetricId.haus_gesamt, start, end)
         wallbox = (
@@ -705,21 +744,42 @@ class MetricService:
         by_h = {b.period_start: b.value_kwh for b in haus_daily.buckets}
         by_p = {b.period_start: b.value_kwh for b in pv_daily.buckets}
 
-        grid_import = 0.0
+        use_export = self._has_grid_export_source()
+        by_e: dict[datetime, float] = {}
+        if use_export:
+            by_e = await self._daily_grid_export(start, end)
+            if not by_e:
+                use_export = False
+
+        grid_import_gross = 0.0
+        grid_import_net = 0.0
+        grid_export = 0.0
         pv_generation = 0.0
         self_consumed = 0.0
         has_data = False
 
-        for ps in sorted(set(by_h) | set(by_p)):
-            imp = by_h.get(ps)
-            prod = by_p.get(ps)
-            if imp is None and prod is None:
+        period_keys = sorted(set(by_h) | set(by_p) | (set(by_e) if use_export else set()))
+        for ps in period_keys:
+            net_v = by_h.get(ps)
+            prod_v = by_p.get(ps)
+            exp_raw = by_e.get(ps) if use_export else None
+            if net_v is None and prod_v is None and exp_raw is None:
                 continue
-            imp_v = imp or 0.0
-            prod_v = prod or 0.0
-            grid_import += imp_v
-            pv_generation += prod_v
-            self_consumed += estimate_daily_self_consumed_pv_kwh(imp_v, prod_v)
+            net = net_v or 0.0
+            prod = prod_v or 0.0
+            export_val = exp_raw if use_export else None
+            gross, self_u, total, export_used = daily_balance_kwh(
+                net,
+                prod,
+                export_val,
+                grid_is_gross_bezug=use_export,
+            )
+
+            grid_import_net += gross - export_used
+            grid_import_gross += gross
+            grid_export += export_used
+            pv_generation += prod
+            self_consumed += self_u
             has_data = True
 
         if not has_data:
@@ -727,19 +787,25 @@ class MetricService:
                 start=start,
                 end=end,
                 timezone=str(tz),
+                balance_method="estimated",
                 total_consumption_kwh=None,
                 grid_import_kwh=None,
+                grid_import_net_kwh=None,
+                grid_export_kwh=None,
                 self_consumed_pv_kwh=None,
                 pv_generation_kwh=None,
             )
 
-        total = grid_import + self_consumed
+        total = grid_import_net + self_consumed
         return EnergyBalanceResponse(
             start=start,
             end=end,
             timezone=str(tz),
+            balance_method="export_meter" if use_export else "estimated",
             total_consumption_kwh=total,
-            grid_import_kwh=grid_import,
+            grid_import_kwh=grid_import_gross,
+            grid_import_net_kwh=grid_import_net,
+            grid_export_kwh=grid_export if use_export else None,
             self_consumed_pv_kwh=self_consumed,
             pv_generation_kwh=pv_generation,
         )

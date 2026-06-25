@@ -29,8 +29,24 @@ class Settings(BaseSettings):
     )
 
     volkszaehler_base_url: str | None = Field(default=None, description="Middleware-Basis, z.B. http://volkszaehler:8080")
-    volkszaehler_uuid_haus: str | None = Field(default=None, description="UUID Hauptzähler (kumulativ)")
-    volkszaehler_uuid_pv: str | None = Field(default=None, description="UUID PV-Erzeugung (kumulativ)")
+    volkszaehler_uuid_haus: str | None = Field(
+        default=None,
+        description="UUID Netz-Bezug kumulativ (SML 1-0:1.8.0) für kWh-Aggregate und Bilanz",
+    )
+    volkszaehler_uuid_haus_power: str | None = Field(
+        default=None,
+        description="Optional: UUID Netz-Wirkleistung (SML 1-0:16.7.0) für Live-Anzeige in kW",
+        validation_alias=AliasChoices("VOLKSZAEHLER_UUID_HAUS_POWER", "VOLKSZAEHLER_UUID_HAUS_LEISTUNG"),
+    )
+    volkszaehler_uuid_pv: str | None = Field(
+        default=None,
+        description="UUID PV: Leistung (16.7.0) oder Erzeugung kumulativ, siehe PV_MEASUREMENT",
+    )
+    volkszaehler_uuid_grid_export: str | None = Field(
+        default=None,
+        description="Volkszähler Netz-Einspeisung kumulativ (SML 1-0:2.8.0 Hauptzähler)",
+        validation_alias=AliasChoices("VOLKSZAEHLER_UUID_GRID_EXPORT", "VOLKSZAEHLER_UUID_EINSPEISUNG"),
+    )
     volkszaehler_raw_unit: Literal["Wh", "kWh"] = Field(
         default="Wh",
         description="Einheit der absoluten Zählerstände aus Volkszähler; API normalisiert nach kWh",
@@ -48,6 +64,20 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("HEAT_PUMP_API_BASE_URL", "WARMEPUMPE_API_URL"),
     )
 
+    entity_id_grid_export_energy: str | None = Field(
+        default=None,
+        description="Optional: HA kumulativer Einspeisezähler (z. B. „Zähler Lieferung Wh“)",
+        validation_alias=AliasChoices(
+            "ENTITY_ID_GRID_EXPORT_ENERGY",
+            "ENTITY_ID_NETZ_EINSPEISUNG",
+            "ENTITY_ID_EINSPEISUNG",
+        ),
+    )
+    grid_export_raw_unit: Literal["Wh", "kWh"] = Field(
+        default="Wh",
+        description="Einheit des HA-Einspeisezählers; API normalisiert nach kWh",
+        validation_alias=AliasChoices("GRID_EXPORT_RAW_UNIT", "ENTITY_ID_GRID_EXPORT_UNIT"),
+    )
     entity_id_eauto_energy: str | None = Field(
         default=None,
         description="HA Entity Wallbox: kumulativer Energiezähler oder Scheinleistung (siehe EAUTO_MEASUREMENT)",

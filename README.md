@@ -51,6 +51,7 @@ Healthcheck: `GET http://localhost:8080/health`
 ### REST-Endpunkte (Auszug)
 
 - `GET /api/v1/metrics` — Katalog
+- `GET /api/v1/energy/balance?start=...&end=...` — Bilanz: Gesamtverbrauch, Netzbezug (Rechnung), Einspeisung, PV-Eigenverbrauch
 - `GET /api/v1/energy/wallbox-split?start=...&end=...` — Haus / Wallbox / Haus ohne Wallbox (kWh im Zeitraum)
 - `GET /api/v1/metrics/{metric_id}/current` — aktueller Wert (kWh oder bei Wallbox/VA: kVA Momentanleistung)
 - `GET /api/v1/metrics/{metric_id}/timeseries?start=...&end=...` — Zählerstand-Zeitreihe

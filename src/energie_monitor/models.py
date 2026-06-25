@@ -134,10 +134,20 @@ class EnergyBalanceResponse(BaseModel):
     end: datetime
     unit: str = Field(default="kWh")
     timezone: str
-    total_consumption_kwh: float | None = Field(
-        description="Gesamtverbrauch = Netzbezug + PV-Eigenverbrauch (kWh)"
+    balance_method: str = Field(
+        default="estimated",
+        description="export_meter = mit Einspeisungszähler; estimated = Schätzung ohne Einspeisung",
     )
-    grid_import_kwh: float | None = Field(description="Eingekaufter Strom / Netzbezug (kWh)")
+    total_consumption_kwh: float | None = Field(
+        description="Gesamtverbrauch im Haus (kWh)"
+    )
+    grid_import_kwh: float | None = Field(
+        description="Brutto-Netzbezug wie Rechnung (kWh); ohne Einspeisungszähler = Volkszähler-Netto"
+    )
+    grid_import_net_kwh: float | None = Field(
+        description="Netto am Zähler (Bezug − Einspeisung), Volkszähler Haus (kWh)"
+    )
+    grid_export_kwh: float | None = Field(description="Netz-Einspeisung (kWh)")
     self_consumed_pv_kwh: float | None = Field(
         description="Selbst verbrauchte PV-Energie im Zeitraum (kWh)"
     )

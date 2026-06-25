@@ -239,6 +239,39 @@ def rollup_period_energy_to_buckets(
     return out
 
 
+def raw_energy_to_kwh(raw_unit: str, raw: float) -> float:
+    if raw_unit == "Wh":
+        return raw / 1000.0
+    return raw
+
+
+def daily_balance_kwh(
+    grid_kwh: float,
+    pv_kwh: float,
+    grid_export_kwh: float | None,
+    *,
+    grid_is_gross_bezug: bool = False,
+) -> tuple[float, float, float, float]:
+    """
+    Tagesbilanz → (brutto_bezug, eigenverbrauch, gesamtverbrauch, einspeisung).
+
+    grid_is_gross_bezug: grid_kwh ist 1-0:1.8.0 (Rechnungs-Bezug). Sonst Netto am Zähler.
+    """
+    if grid_export_kwh is not None:
+        export = max(grid_export_kwh, 0.0)
+        if grid_is_gross_bezug:
+            gross_import = grid_kwh
+            net_import = gross_import - export
+        else:
+            net_import = grid_kwh
+            gross_import = net_import + export
+        self_consumed = max(0.0, pv_kwh - export)
+        total = net_import + self_consumed
+        return gross_import, self_consumed, total, export
+    self_consumed = estimate_daily_self_consumed_pv_kwh(grid_kwh, pv_kwh)
+    return grid_kwh, self_consumed, grid_kwh + self_consumed, 0.0
+
+
 def estimate_daily_self_consumed_pv_kwh(import_kwh: float, pv_kwh: float) -> float:
     """
     PV-Eigenverbrauch aus Tages-Netzbezug und PV-Erzeugung (ohne Einspeisungszähler).
