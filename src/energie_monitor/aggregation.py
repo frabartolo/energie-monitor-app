@@ -288,6 +288,13 @@ def estimate_daily_self_consumed_pv_kwh(import_kwh: float, pv_kwh: float) -> flo
     return import_kwh + surplus * 0.4
 
 
+def normalize_pv_generation_kwh(value: float | None) -> float | None:
+    """PV-Erzeugung aus Leistungskanal/VZ-consumption ist oft negativ (Erzeugungsrichtung)."""
+    if value is None:
+        return None
+    return abs(value)
+
+
 def energy_kwh_from_power_kw(points: list[tuple[datetime, float]]) -> float | None:
     """Trapezintegration einer kW-Leistungszeitreihe → kWh."""
     if len(points) < 2:

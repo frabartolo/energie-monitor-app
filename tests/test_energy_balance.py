@@ -46,10 +46,13 @@ def test_daily_balance_without_export():
 
 
 def test_raw_energy_wh_to_kwh():
-    from energie_monitor.aggregation import raw_energy_to_kwh
+    from energie_monitor.aggregation import normalize_pv_generation_kwh, raw_energy_to_kwh
 
     assert raw_energy_to_kwh("Wh", 5000.0) == pytest.approx(5.0)
     assert raw_energy_to_kwh("kWh", 5.0) == pytest.approx(5.0)
+    assert normalize_pv_generation_kwh(-16.44) == pytest.approx(16.44)
+    assert normalize_pv_generation_kwh(12.0) == pytest.approx(12.0)
+    assert normalize_pv_generation_kwh(None) is None
 
 
 @pytest.fixture()
@@ -109,6 +112,7 @@ def balance_export_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         volkszaehler_uuid_grid_export="uuid-export",
         volkszaehler_raw_unit="kWh",
         energy_timezone="Europe/Berlin",
+        pv_measurement="instantaneous_power_kw",
         request_timeout_seconds=1,
     )
     app.dependency_overrides[get_settings] = lambda: settings
@@ -122,7 +126,9 @@ def balance_export_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
                 return [(d1, 10.0), (d2, 20.0)]
             if uuid == "uuid-export":
                 return [(d1, 5.0), (d2, 5.0)]
-            return [(d1, 5.0), (d2, 20.0)]
+            if uuid == "uuid-pv":
+                return [(d1, -5.0), (d2, -20.0)]
+            return []
         return []
 
     monkeypatch.setattr(vz, "vz_get_tuples", fake_vz)
@@ -132,6 +138,18 @@ def balance_export_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     app.dependency_overrides.clear()
     get_settings.cache_clear()
+
+
+def test_energy_balance_api_with_export_negative_pv(balance_export_client: TestClient):
+    start = "2026-05-01T22:00:00Z"
+    end = "2026-05-03T22:00:00Z"
+    r = balance_export_client.get(f"/api/v1/energy/balance?start={start}&end={end}")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["balance_method"] == "export_meter"
+    assert data["pv_generation_kwh"] == pytest.approx(20.0)
+    assert data["self_consumed_pv_kwh"] == pytest.approx(15.0)
+    assert data["total_consumption_kwh"] == pytest.approx(30.0)
 
 
 def test_energy_balance_api_with_export(balance_export_client: TestClient):

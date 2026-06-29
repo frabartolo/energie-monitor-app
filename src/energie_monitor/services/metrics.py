@@ -20,6 +20,7 @@ from energie_monitor.aggregation import (
     interval_label,
     load_profile_buckets,
     load_profile_from_period_energy,
+    normalize_pv_generation_kwh,
     raw_energy_to_kwh,
     resolve_load_profile_interval,
     rollup_daily_to_monthly,
@@ -141,6 +142,8 @@ class MetricService:
         tz = self._resolve_tz(None)
         if group == "day":
             periods = daily_buckets_from_consumption_points(pts, start, end, tz=tz)
+            if metric_id == MetricId.pv and self._pv_is_power():
+                periods = [(a, b, normalize_pv_generation_kwh(c)) for a, b, c in periods]
             raw = load_profile_from_period_energy(periods)
         else:
             periods = hourly_buckets_from_consumption_points(pts, start, end, tz)
@@ -429,7 +432,14 @@ class MetricService:
                 )
                 tz = self._resolve_tz(None)
                 raw = daily_buckets_from_consumption_points(pts, start, end, tz=tz)
-                buckets = [AggregateBucket(period_start=a, period_end=b, value_kwh=c) for a, b, c in raw]
+                buckets = [
+                    AggregateBucket(
+                        period_start=a,
+                        period_end=b,
+                        value_kwh=normalize_pv_generation_kwh(c),
+                    )
+                    for a, b, c in raw
+                ]
                 return DailyAggregateResponse(metric_id=metric_id, buckets=buckets)
 
         vz_uuid = self._volkszaehler_uuid(metric_id)

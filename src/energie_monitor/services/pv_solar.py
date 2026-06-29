@@ -8,6 +8,7 @@ from energie_monitor.aggregation import (
     consumption_by_local_date,
     energy_kwh_from_power_kw,
     local_window_bounds,
+    normalize_pv_generation_kwh,
     slice_points_for_window,
 )
 from energie_monitor.models import MetricId, PvSolarYieldResponse, PvSolarYieldRow, PvSolarYieldSummary
@@ -264,7 +265,7 @@ class PvSolarService:
                 ld = date(year, month, d)
                 iso = ld.isoformat()
                 if ld in by_local:
-                    by_date[iso] = by_local[ld]
+                    by_date[iso] = normalize_pv_generation_kwh(by_local[ld])
                 else:
                     missing.append(ld)
             for ld in missing:
