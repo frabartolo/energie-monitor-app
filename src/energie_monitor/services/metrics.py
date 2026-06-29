@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -60,7 +61,12 @@ _WP_CATALOG = (
 _VZ_CONSUMPTION_CHUNK_DAYS = 7
 
 _LOAD_PROFILE_CACHE: dict[tuple[str, str, str, str], tuple[datetime, LoadProfileResponse]] = {}
-_LOAD_PROFILE_CACHE_TTL = timedelta(seconds=120)
+_LOAD_PROFILE_CACHE_TTL = timedelta(seconds=300)
+_LOAD_PROFILE_INFLIGHT: dict[tuple[str, str, str, str], asyncio.Task[LoadProfileResponse]] = {}
+
+_BALANCE_CACHE: dict[tuple[str, str], tuple[datetime, EnergyBalanceResponse]] = {}
+_BALANCE_CACHE_TTL = timedelta(seconds=300)
+_BALANCE_INFLIGHT: dict[tuple[str, str], asyncio.Task[EnergyBalanceResponse]] = {}
 
 
 class MetricService:
@@ -515,9 +521,25 @@ class MetricService:
         cached = _LOAD_PROFILE_CACHE.get(cache_key)
         if cached and cached[0] > now:
             return cached[1].model_copy(deep=True)
-        result = await self._load_profile_compute(metric_id, start, end, interval)
-        _LOAD_PROFILE_CACHE[cache_key] = (now + _LOAD_PROFILE_CACHE_TTL, result.model_copy(deep=True))
-        return result
+
+        inflight = _LOAD_PROFILE_INFLIGHT.get(cache_key)
+        if inflight is not None:
+            return await asyncio.shield(inflight)
+
+        async def _compute() -> LoadProfileResponse:
+            result = await self._load_profile_compute(metric_id, start, end, interval)
+            _LOAD_PROFILE_CACHE[cache_key] = (
+                datetime.now(UTC) + _LOAD_PROFILE_CACHE_TTL,
+                result.model_copy(deep=True),
+            )
+            return result
+
+        task = asyncio.create_task(_compute())
+        _LOAD_PROFILE_INFLIGHT[cache_key] = task
+        try:
+            return await task
+        finally:
+            _LOAD_PROFILE_INFLIGHT.pop(cache_key, None)
 
     async def _load_profile_compute(
         self,
@@ -748,18 +770,54 @@ class MetricService:
         }
 
     async def energy_balance(self, start: datetime, end: datetime) -> EnergyBalanceResponse:
-        tz = self._resolve_tz(None)
-        haus_daily = await self.daily(MetricId.haus_gesamt, start, end)
-        pv_daily = await self.daily(MetricId.pv, start, end)
-        by_h = {b.period_start: b.value_kwh for b in haus_daily.buckets}
-        by_p = {b.period_start: b.value_kwh for b in pv_daily.buckets}
+        cache_key = (
+            start.astimezone(UTC).isoformat(),
+            end.astimezone(UTC).isoformat(),
+        )
+        now = datetime.now(UTC)
+        cached = _BALANCE_CACHE.get(cache_key)
+        if cached and cached[0] > now:
+            return cached[1].model_copy(deep=True)
 
+        inflight = _BALANCE_INFLIGHT.get(cache_key)
+        if inflight is not None:
+            return await asyncio.shield(inflight)
+
+        async def _compute() -> EnergyBalanceResponse:
+            result = await self._energy_balance_compute(start, end)
+            _BALANCE_CACHE[cache_key] = (
+                datetime.now(UTC) + _BALANCE_CACHE_TTL,
+                result.model_copy(deep=True),
+            )
+            return result
+
+        task = asyncio.create_task(_compute())
+        _BALANCE_INFLIGHT[cache_key] = task
+        try:
+            return await task
+        finally:
+            _BALANCE_INFLIGHT.pop(cache_key, None)
+
+    async def _energy_balance_compute(self, start: datetime, end: datetime) -> EnergyBalanceResponse:
+        tz = self._resolve_tz(None)
         use_export = self._has_grid_export_source()
-        by_e: dict[datetime, float] = {}
         if use_export:
-            by_e = await self._daily_grid_export(start, end)
+            haus_daily, pv_daily, by_e = await asyncio.gather(
+                self.daily(MetricId.haus_gesamt, start, end),
+                self.daily(MetricId.pv, start, end),
+                self._daily_grid_export(start, end),
+            )
             if not by_e:
                 use_export = False
+        else:
+            haus_daily, pv_daily = await asyncio.gather(
+                self.daily(MetricId.haus_gesamt, start, end),
+                self.daily(MetricId.pv, start, end),
+            )
+            by_e = {}
+
+        by_h = {b.period_start: b.value_kwh for b in haus_daily.buckets}
+        by_p = {b.period_start: b.value_kwh for b in pv_daily.buckets}
 
         grid_import_gross = 0.0
         grid_import_net = 0.0
